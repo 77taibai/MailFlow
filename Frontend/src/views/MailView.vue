@@ -1,0 +1,420 @@
+<template>
+  <el-container class="mail-page">
+    <el-aside width="250px" class="sidebar">
+      <div class="brand">
+        <el-icon :size="20"><Message /></el-icon>
+        <span>MailFlow</span>
+      </div>
+
+      <div class="section-title">邮箱</div>
+      <el-scrollbar max-height="180px">
+        <div
+          v-for="mb in mailboxes"
+          :key="mb.id"
+          class="mailbox-item"
+          :class="{ active: mb.id === selectedMailboxId }"
+          @click="selectMailbox(mb.id)"
+        >
+          <span class="mb-name">{{ mb.name }}</span>
+          <el-badge v-if="mb.unreadCount" :value="mb.unreadCount" :max="99" />
+        </div>
+        <div v-if="!mailboxes.length" class="empty-tip">
+          暂无邮箱，<router-link to="/mailboxes">去添加</router-link>
+        </div>
+      </el-scrollbar>
+
+      <div class="section-title">文件夹</div>
+      <el-scrollbar class="folder-scroll">
+        <div
+          v-for="f in folders"
+          :key="f.id"
+          class="folder-item"
+          :class="{ active: f.id === selectedFolderId }"
+          @click="selectFolder(f.id)"
+        >
+          <el-icon><Folder /></el-icon>
+          <span class="folder-name">{{ folderDisplayName(f) }}</span>
+          <el-badge v-if="f.unread" :value="f.unread" :max="99" />
+        </div>
+        <div v-if="!folders.length" class="empty-tip">暂无显示中的文件夹，可在邮箱管理 → 文件夹 中开启同步</div>
+      </el-scrollbar>
+
+      <div class="sidebar-footer">
+        <router-link to="/mailboxes"><el-button text>邮箱管理</el-button></router-link>
+        <router-link to="/settings"><el-button text>设置</el-button></router-link>
+        <el-button text type="danger" @click="logout">退出</el-button>
+      </div>
+    </el-aside>
+
+    <el-main class="list-pane">
+      <div class="list-toolbar">
+        <el-button :icon="Refresh" size="small" :loading="syncing" :disabled="!selectedMailboxId" @click="syncNow">
+          同步
+        </el-button>
+        <el-button size="small" :disabled="!selectedIds.length" @click="batchSeen(true)">标记已读</el-button>
+        <el-button size="small" :disabled="!selectedIds.length" @click="batchSeen(false)">标记未读</el-button>
+        <el-button size="small" :disabled="!selectedIds.length" @click="moveDialogVisible = true">移动</el-button>
+        <el-button size="small" type="danger" :disabled="!selectedIds.length" @click="batchDelete">删除</el-button>
+        <div class="spacer"></div>
+        <el-pagination
+          v-model:current-page="page"
+          :page-size="pageSize"
+          :total="total"
+          layout="prev, pager, next"
+          small
+          @current-change="loadMails"
+        />
+        <el-button type="primary" :icon="EditPen" size="small" :disabled="!mailboxes.length" @click="openCompose">
+          撰写
+        </el-button>
+      </div>
+
+      <mail-list
+        :mails="mails"
+        :selected-ids="selectedIds"
+        :loading="listLoading"
+        @toggle="toggleSelect"
+        @open="openMail"
+      />
+    </el-main>
+
+    <el-main class="reader-pane">
+      <mail-reader :mail="currentMail" @refresh="loadMails" @reply="prefillReply" />
+    </el-main>
+
+    <compose-dialog ref="composeRef" :mailboxes="mailboxes" />
+
+    <el-dialog v-model="moveDialogVisible" title="移动到文件夹" width="360px">
+      <el-select v-model="moveTarget" placeholder="选择目标文件夹" style="width: 100%">
+        <el-option
+          v-for="f in folders.filter((f) => f.id !== selectedFolderId)"
+          :key="f.id"
+          :label="folderDisplayName(f)"
+          :value="f.id"
+        />
+      </el-select>
+      <template #footer>
+        <el-button @click="moveDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!moveTarget" @click="batchMove">确定</el-button>
+      </template>
+    </el-dialog>
+  </el-container>
+</template>
+
+<script setup>
+import { onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { Refresh, EditPen } from '@element-plus/icons-vue';
+import api, { errMsg } from '../api.js';
+import { useAuthStore } from '../stores/auth.js';
+import MailList from '../components/MailList.vue';
+import MailReader from '../components/MailReader.vue';
+import ComposeDialog from '../components/ComposeDialog.vue';
+
+const router = useRouter();
+const auth = useAuthStore();
+
+const mailboxes = ref([]);
+const selectedMailboxId = ref(null);
+const folders = ref([]);
+const selectedFolderId = ref(null);
+const mails = ref([]);
+const total = ref(0);
+const page = ref(1);
+const pageSize = 20;
+const selectedIds = ref([]);
+const currentMail = ref(null);
+const listLoading = ref(false);
+const syncing = ref(false);
+const composeRef = ref();
+const moveDialogVisible = ref(false);
+const moveTarget = ref(null);
+
+function folderDisplayName(f) {
+  if (f.specialUse === '\\Inbox' || f.path === 'INBOX') return '收件箱';
+  if (f.specialUse === '\\Sent') return '已发送';
+  if (f.specialUse === '\\Trash') return '已删除';
+  if (f.specialUse === '\\Drafts') return '草稿箱';
+  if (f.specialUse === '\\Junk') return '垃圾邮件';
+  return f.path;
+}
+
+async function loadMailboxes() {
+  const data = await api.get('/mailboxes');
+  mailboxes.value = data.items;
+  if (!selectedMailboxId.value && data.items.length) {
+    selectMailbox(data.items[0].id);
+  } else if (selectedMailboxId.value) {
+    const cur = data.items.find((m) => m.id === selectedMailboxId.value);
+    if (!cur && data.items.length) selectMailbox(data.items[0].id);
+  }
+}
+
+function selectMailbox(id) {
+  selectedMailboxId.value = id;
+  selectedFolderId.value = null;
+  currentMail.value = null;
+  selectedIds.value = [];
+  loadFolders();
+}
+
+async function loadFolders() {
+  if (!selectedMailboxId.value) return;
+  const data = await api.get(`/mailboxes/${selectedMailboxId.value}/folders`);
+  folders.value = data.items.filter((f) => f.syncEnabled);
+  const current = folders.value.find((f) => f.id === selectedFolderId.value);
+  if (!current) {
+    const inbox = folders.value.find((f) => f.specialUse === '\\Inbox' || f.path === 'INBOX');
+    const first = inbox || folders.value[0];
+    if (first) {
+      selectFolder(first.id);
+    } else {
+      selectedFolderId.value = null;
+      mails.value = [];
+      total.value = 0;
+      currentMail.value = null;
+      selectedIds.value = [];
+    }
+  }
+}
+
+function selectFolder(id) {
+  selectedFolderId.value = id;
+  page.value = 1;
+  currentMail.value = null;
+  selectedIds.value = [];
+  loadMails();
+}
+
+async function loadMails() {
+  if (!selectedMailboxId.value || !selectedFolderId.value) return;
+  listLoading.value = true;
+  try {
+    const data = await api.get('/mails', {
+      params: {
+        mailboxId: selectedMailboxId.value,
+        folderId: selectedFolderId.value,
+        page: page.value,
+        pageSize,
+      },
+    });
+    mails.value = data.items;
+    total.value = data.total;
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  } finally {
+    listLoading.value = false;
+  }
+}
+
+async function refreshAll() {
+  await loadMailboxes();
+  await loadFolders();
+  await loadMails();
+}
+
+async function syncNow() {
+  if (!selectedMailboxId.value) return;
+  syncing.value = true;
+  try {
+    await api.post(`/mailboxes/${selectedMailboxId.value}/sync`);
+    ElMessage.success('同步已触发');
+    setTimeout(refreshAll, 3000);
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  } finally {
+    syncing.value = false;
+  }
+}
+
+function toggleSelect(id, checked) {
+  if (checked) {
+    if (!selectedIds.value.includes(id)) selectedIds.value.push(id);
+  } else {
+    selectedIds.value = selectedIds.value.filter((v) => v !== id);
+  }
+}
+
+async function openMail(mail) {
+  try {
+    const data = await api.get(`/mails/${mail.id}`);
+    currentMail.value = data;
+    if (!mail.seen) {
+      mail.seen = true;
+      await api.patch(`/mails/${mail.id}`, { seen: true });
+      loadFolders();
+      loadMailboxes();
+    }
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  }
+}
+
+async function batchSeen(seen) {
+  try {
+    await api.post('/mails/batch', { ids: [...selectedIds.value], action: seen ? 'seen' : 'unseen' });
+    ElMessage.success('已更新');
+    selectedIds.value = [];
+    await loadMails();
+    loadFolders();
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  }
+}
+
+async function batchMove() {
+  moveDialogVisible.value = false;
+  try {
+    await api.post('/mails/batch', {
+      ids: [...selectedIds.value],
+      action: 'move',
+      folderId: moveTarget.value,
+    });
+    ElMessage.success('已移动');
+    selectedIds.value = [];
+    moveTarget.value = null;
+    currentMail.value = null;
+    await refreshAll();
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  }
+}
+
+async function batchDelete() {
+  try {
+    await ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 封邮件吗？`, '删除', {
+      type: 'warning',
+    });
+  } catch {
+    return;
+  }
+  try {
+    await api.post('/mails/batch', { ids: [...selectedIds.value], action: 'delete' });
+    ElMessage.success('已删除');
+    selectedIds.value = [];
+    currentMail.value = null;
+    await refreshAll();
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  }
+}
+
+function openCompose() {
+  composeRef.value.open(null);
+}
+
+function prefillReply(mail) {
+  composeRef.value.open(mail);
+}
+
+function logout() {
+  auth.logout();
+  router.replace('/login');
+}
+
+onMounted(() => {
+  auth.fetchMe();
+  loadMailboxes();
+});
+</script>
+
+<style scoped>
+.mail-page {
+  height: 100%;
+  overflow: hidden;
+}
+.sidebar {
+  border-right: 1px solid #e4e7ed;
+  display: flex;
+  flex-direction: column;
+  background: #f7f8fa;
+  overflow: hidden;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 17px;
+  color: #2b4c6f;
+  padding: 14px 16px 10px;
+}
+.section-title {
+  font-size: 12px;
+  color: #909399;
+  padding: 8px 16px 4px;
+}
+.mailbox-item,
+.folder-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.mailbox-item:hover,
+.folder-item:hover {
+  background: #ecf5ff;
+}
+.mailbox-item.active,
+.folder-item.active {
+  background: #d9ecff;
+}
+.mb-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.folder-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar :deep(.el-scrollbar) {
+  height: auto;
+}
+.folder-scroll {
+  flex: 1 1 0%;
+  min-height: 0;
+}
+.empty-tip {
+  font-size: 13px;
+  color: #909399;
+  padding: 6px 16px;
+}
+.sidebar-footer {
+  border-top: 1px solid #e4e7ed;
+  padding: 6px 8px;
+  display: flex;
+  justify-content: space-between;
+}
+.list-pane {
+  border-right: 1px solid #e4e7ed;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-width: 460px;
+  min-width: 360px;
+  flex: 0 0 400px;
+}
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid #e4e7ed;
+  flex-wrap: wrap;
+}
+.spacer {
+  flex: 1;
+}
+.reader-pane {
+  padding: 0;
+  overflow: hidden;
+}
+</style>
