@@ -89,7 +89,7 @@ commits: e41abc0..d8c3b01
 
 ### 发送邮件
 
-- `POST /api/mails/send`（multipart，multer 限制单文件 25MB、最多 10 个）：to/cc 用邮箱列表解析，subject/text/html + files → nodemailer SMTP（password 或 XOAUTH2 accessToken）。
+- `POST /api/mails/send`（multipart，multer 限制单文件 25MB、最多 10 个）：to/cc 用邮箱列表解析，subject/text/html + files → nodemailer SMTP（password 或 XOAUTH2 accessToken）。前端用 Quill 富文本编辑器生成 html 并附带纯文本；仅传 html 时后端由 html 兜底生成 text，产出 multipart/alternative。
 - 发送后 best-effort IMAP APPEND 到该邮箱 `\Sent` folder；失败则本地落一条 folder=已存在 Sent path（找不到则虚拟 `Sent`）的副本（uid NULL, \Seen），保证"已发送"可见。
 
 ### 钉钉推送
@@ -105,7 +105,7 @@ commits: e41abc0..d8c3b01
 ### 前端页面
 
 - `/login`：密码表单 + （若启用）OIDC 按钮；`/oidc-callback` 读 hash 存 token。
-- `/`：三栏邮件台 —— 左：邮箱与文件夹树（仅显示已开启同步的文件夹；含未读数、管理入口）；中：邮件列表（勾选批量、未读加粗、附件图标）；右：阅读窗（详情 iframe、附件下载、已读/未读/移动/删除/回复）。
+- `/`：三栏邮件台 —— 左：邮箱与文件夹树（仅显示已开启同步的文件夹；含未读数、管理入口）；中：邮件列表（勾选批量、未读加粗、附件图标）；右：阅读窗（详情 iframe、附件下载、已读/未读/移动/删除/回复）；撰写对话框正文用 Quill 富文本（加粗/斜体/列表/链接等），回复时以引用块预填纯文本内容。
 - `/mailboxes`：邮箱 CRUD、连接测试、立即同步、Gmail/Outlook OAuth 授权按钮、每邮箱钉钉开关与关键词、文件夹同步开关（对话框）。
 - `/settings`：钉钉 webhook/secret/开关/测试、全局同步间隔。
 - axios 拦截 401 → 清 token 回登录页；写信任 localStorage token。

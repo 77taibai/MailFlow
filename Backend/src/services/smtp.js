@@ -41,18 +41,40 @@ function parseAddressList(input) {
   return list;
 }
 
+function htmlToText(html) {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<head[\s\S]*?<\/head>/gi, ' ')
+    .replace(/<\/(p|div|tr|li|h[1-6]|blockquote)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/[ \t\f\v]+/g, ' ')
+    .replace(/\n\s*\n\s*/g, '\n\n')
+    .trim();
+}
+
 export async function sendMail(mailbox, { to, cc, subject, text, html, attachments }) {
   const toList = parseAddressList(to);
   if (!toList.length) throw new Error('收件人不能为空');
   const ccList = parseAddressList(cc);
+
+  const htmlContent = String(html || '').trim();
+  const textContent = String(text || '').trim() || (htmlContent ? htmlToText(htmlContent) : '');
 
   const mailOptions = {
     from: mailbox.email,
     to: toList.join(', '),
     cc: ccList.length ? ccList.join(', ') : undefined,
     subject: subject || '',
-    text: text || '',
-    html: html || undefined,
+    text: textContent,
+    html: htmlContent || undefined,
     attachments: (attachments || []).map((a) => ({
       filename: a.originalname || a.filename,
       content: a.buffer,
@@ -88,9 +110,9 @@ export async function sendMail(mailbox, { to, cc, subject, text, html, attachmen
     toList.join(', '),
     ccList.length ? ccList.join(', ') : null,
     Number.isFinite(sentDate) ? sentDate : now,
-    String(text || '').replace(/\s+/g, ' ').trim().slice(0, 200),
-    text || '',
-    html || null,
+    textContent.replace(/\s+/g, ' ').trim().slice(0, 200),
+    textContent,
+    htmlContent || null,
     JSON.stringify(['\\Seen']),
     Buffer.byteLength(raw),
     attachments && attachments.length ? 1 : 0,

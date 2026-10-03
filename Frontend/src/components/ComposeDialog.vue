@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" title="撰写邮件" width="680px" :close-on-click-modal="false">
+  <el-dialog v-model="visible" title="撰写邮件" width="760px" :close-on-click-modal="false">
     <el-form label-width="70px">
       <el-form-item label="发件邮箱">
         <el-select v-model="form.mailboxId" placeholder="选择发件邮箱" style="width: 100%">
@@ -16,7 +16,7 @@
         <el-input v-model="form.subject" />
       </el-form-item>
       <el-form-item label="正文">
-        <el-input v-model="form.text" type="textarea" :rows="10" placeholder="邮件正文" />
+        <rich-text-editor ref="editorRef" v-model="form.html" placeholder="邮件正文" />
       </el-form-item>
       <el-form-item label="附件">
         <el-upload
@@ -45,6 +45,7 @@ import { reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Paperclip } from '@element-plus/icons-vue';
 import api, { errMsg } from '../api.js';
+import RichTextEditor from './RichTextEditor.vue';
 
 const props = defineProps({
   mailboxes: { type: Array, default: () => [] },
@@ -55,19 +56,37 @@ const emit = defineEmits(['sent']);
 const visible = ref(false);
 const sending = ref(false);
 const fileList = ref([]);
-const form = reactive({ mailboxId: null, to: '', cc: '', subject: '', text: '' });
+const editorRef = ref();
+const form = reactive({ mailboxId: null, to: '', cc: '', subject: '', html: '' });
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function quoteHtml(replyMail) {
+  const source = replyMail.bodyText || String(replyMail.bodyHtml || '').replace(/<[^>]*>/g, '');
+  const quoted = escapeHtml(source.slice(0, 500)).replace(/\r?\n/g, '<br>');
+  const date = escapeHtml(formatReplyDate(replyMail.date));
+  const author = escapeHtml(replyMail.fromName || replyMail.fromAddr || '');
+  return `<p></p><p>------------------</p><p>在 ${date}，${author} 写道:</p><blockquote>${quoted}</blockquote>`;
+}
 
 function open(replyMail) {
   form.mailboxId = props.mailboxes.length ? props.mailboxes[0].id : null;
   form.to = '';
   form.cc = '';
   form.subject = '';
-  form.text = '';
+  form.html = '';
   fileList.value = [];
   if (replyMail) {
     form.to = replyMail.fromAddr || '';
     form.subject = replyMail.subject?.startsWith('Re:') ? replyMail.subject : `Re: ${replyMail.subject || ''}`;
-    form.text = `\n\n------------------\n在 ${formatReplyDate(replyMail.date)}，${replyMail.fromName || replyMail.fromAddr || ''} 写道:\n${(replyMail.bodyText || '').slice(0, 500)}`;
+    form.html = quoteHtml(replyMail);
   }
   visible.value = true;
 }
@@ -87,7 +106,8 @@ async function send() {
     fd.append('to', form.to);
     fd.append('cc', form.cc);
     fd.append('subject', form.subject);
-    fd.append('text', form.text);
+    fd.append('html', form.html);
+    fd.append('text', editorRef.value ? editorRef.value.getText() : '');
     for (const f of fileList.value) {
       fd.append('attachments', f.raw);
     }
