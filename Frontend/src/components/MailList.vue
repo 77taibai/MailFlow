@@ -4,7 +4,7 @@
       v-for="m in mails"
       :key="m.id"
       class="mail-row"
-      :class="{ unread: !m.seen, selected: selectedIds.includes(m.id) }"
+      :class="{ unread: !m.seen, selected: selectedIds.includes(m.id), active: activeMailId === m.id }"
       @click="$emit('open', m)"
     >
       <el-checkbox
@@ -37,6 +37,7 @@ import { formatDate } from '../utils.js';
 defineProps({
   mails: { type: Array, default: () => [] },
   selectedIds: { type: Array, default: () => [] },
+  activeMailId: { type: Number, default: null },
   loading: { type: Boolean, default: false },
 });
 
@@ -60,6 +61,18 @@ defineEmits(['toggle', 'open']);
 }
 .mail-row.selected {
   background: #ecf5ff;
+}
+.mail-row.active {
+  background: #d9ecff;
+  box-shadow: inset 3px 0 0 #409eff;
+}
+.mail-row.active .from,
+.mail-row.active .subject {
+  color: #2b4c6f;
+  font-weight: 600;
+}
+.mail-row.active .snippet {
+  color: #909399;
 }
 .mail-row .from,
 .mail-row .subject {

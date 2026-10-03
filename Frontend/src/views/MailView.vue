@@ -85,6 +85,7 @@
       <mail-list
         :mails="mails"
         :selected-ids="selectedIds"
+        :active-mail-id="currentMail && currentMail.id"
         :loading="listLoading"
         @toggle="toggleSelect"
         @open="openMail"
