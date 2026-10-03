@@ -1,4 +1,4 @@
-import { listMailboxes, getSetting } from '../db.js';
+import { listMailboxes } from '../db.js';
 import { config } from '../config.js';
 import { syncMailbox } from './imap.js';
 
@@ -6,11 +6,6 @@ const syncing = new Set();
 let chain = Promise.resolve();
 
 export function globalSyncIntervalSec() {
-  const v = getSetting('global_sync_interval_sec');
-  if (v !== null && v !== '') {
-    const n = Number(v);
-    if (Number.isFinite(n) && n >= 30) return n;
-  }
   return config.syncIntervalSec;
 }
 

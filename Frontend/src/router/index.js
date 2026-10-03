@@ -13,7 +13,6 @@ const routes = [
   },
   { path: '/', component: () => import('../views/MailView.vue') },
   { path: '/mailboxes', component: () => import('../views/MailboxesView.vue') },
-  { path: '/settings', component: () => import('../views/SettingsView.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 

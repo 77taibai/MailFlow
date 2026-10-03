@@ -11,11 +11,6 @@ db.exec('PRAGMA journal_mode = WAL;');
 db.exec('PRAGMA foreign_keys = ON;');
 
 db.exec(`
-CREATE TABLE IF NOT EXISTS settings (
-  key TEXT PRIMARY KEY,
-  value TEXT
-);
-
 CREATE TABLE IF NOT EXISTS mailboxes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -98,21 +93,6 @@ CREATE TABLE IF NOT EXISTS attachments (
   created_at INTEGER NOT NULL
 );
 `);
-
-export function getSetting(key) {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-  return row ? row.value : null;
-}
-
-export function setSetting(key, value) {
-  if (value === null || value === undefined) {
-    db.prepare('DELETE FROM settings WHERE key = ?').run(key);
-    return;
-  }
-  db.prepare(
-    'INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
-  ).run(key, String(value));
-}
 
 export function getMailbox(id) {
   return db.prepare('SELECT * FROM mailboxes WHERE id = ?').get(id) || null;

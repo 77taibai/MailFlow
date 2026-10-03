@@ -11,7 +11,7 @@
 - **Gmail / Outlook 一键授权**：OAuth2 全链路（IMAP + SMTP 双通道），服务器地址、账号、凭据自动生成，无需手填；access token 到期前自动用 refresh token 刷新。
 - **邮件收发**：分页浏览、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
 - **登录**：用户名密码（默认 `admin`）与自有 OIDC 单点登录二选一，JWT 会话（默认 7 天），登录接口内存限速 10 次/分钟/IP。
-- **钉钉推送**：全局 + 每邮箱双开关，主题关键词白/黑名单，最大年龄窗口（默认 48h，防止首次回填轰炸），加签、队列限速防频控。
+- **钉钉推送**：全局 `.env` 配置（填 webhook 即启用），每邮箱独立开关，主题关键词白/黑名单，最大年龄窗口（默认 48h，防止首次回填轰炸），加签、队列限速防频控。
 - **敏感数据加密**：邮箱密码、OAuth token、钉钉 secret 全部 AES-256-GCM 加密落库。
 - **同源单端口部署**：生产模式后端直接托管前端构建产物并做 SPA 回退。
 
@@ -37,13 +37,13 @@ MailFlow/
 │   │   ├── config.js         # 环境变量解析与必填校验
 │   │   ├── db.js             # SQLite 初始化、建表、通用查询
 │   │   ├── crypto.js         # AES-256-GCM 加解密、JWT 签发/校验、常量时间比较
-│   │   ├── routes/           # auth / mailboxes / mails / settings
+│   │   ├── routes/           # auth / mailboxes / mails
 │   │   └── services/         # imap / smtp / scheduler / oauth / mailboxAuth / dingtalk
 │   ├── .env.example          # 带注释的配置模板
 │   └── package.json
 ├── Frontend/
 │   ├── src/
-│   │   ├── views/            # Login / OidcCallback / Mail / Mailboxes / Settings
+│   │   ├── views/            # Login / OidcCallback / Mail / Mailboxes
 │   │   ├── components/       # ComposeDialog / RichTextEditor / MailboxFormDialog / FoldersDialog / MailList / MailReader
 │   │   ├── stores/auth.js    # 登录态（Pinia）
 │   │   ├── router/index.js   # 路由表与 token 守卫
@@ -120,7 +120,7 @@ cd ..\Backend; npm start            # 监听 :3000，自动托管 dist 并 SPA �
 | `SYNC_BACKFILL_COUNT` | `50` | 首次回填每文件夹最新邮件数 |
 | `SYNC_ON_START` | `1` | 启动 30 秒后是否先跑一轮同步 |
 | `PUSH_MAX_AGE_HOURS` | `48` | 只推送该小时内的新邮件 |
-| `DINGTALK_WEBHOOK_URL` / `DINGTALK_SECRET` | 空 | 钉钉兜底配置，可被界面设置页覆盖 |
+| `DINGTALK_WEBHOOK_URL` / `DINGTALK_SECRET` | 空 | 钉钉配置，`.env` 唯一来源；填 `DINGTALK_WEBHOOK_URL` 即视为启用推送，留空则关闭 |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | 空 | 齐备才启用 Gmail OAuth |
 | `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT` | 空 / 空 / `common` | Outlook OAuth；tenant 用 `consumers` 或租户 ID |
 | `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | 空 | 三者齐备才启用 OIDC 登录 |
@@ -158,7 +158,7 @@ OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关�
 | GET | `/api/auth/oidc/callback` | OIDC 回调，token 经 URL fragment 回传前端 |
 | GET | `/api/mailboxes/oauth/:provider/callback` | 邮箱 OAuth 回调 |
 
-**邮箱与设置**
+**邮箱**
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -171,8 +171,6 @@ OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关�
 | GET | `/api/mailboxes/:id/folders` | 文件夹列表与未读/总数 |
 | PUT | `/api/mailboxes/:id/folders` | 开关单文件夹同步 |
 | GET | `/api/mailboxes/oauth/:provider/start` | 生成服务商授权 URL（JSON 返回 `{url}`） |
-| GET / PUT | `/api/settings` | 读 / 存钉钉配置与全局同步间隔 |
-| POST | `/api/settings/dingtalk/test` | 发一条测试推送 |
 
 **邮件**
 
@@ -187,7 +185,7 @@ OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关�
 
 ## 同步机制
 
-- 调度器每 **30 秒** 扫描一次，到点（`last_sync_at + 间隔`）才执行；间隔取「邮箱级覆盖 → 界面全局设置 → `SYNC_INTERVAL_SEC`」，最小 30 秒。
+- 调度器每 **30 秒** 扫描一次，到点（`last_sync_at + 间隔`）才执行；间隔取「邮箱级覆盖 → `SYNC_INTERVAL_SEC`」，最小 30 秒。
 - 全部邮箱共享一条 Promise 链，**全局任意时刻只有一个同步任务在跑**，同邮箱另有防重入保护。邮箱多时总耗时线性累加。
 - 每个文件夹独立游标：`UIDVALIDITY` 变化即清空重建；首扫回填最新 N 封（按序列号），之后按 UID 增量；三重去重（游标、`(mailbox, folder, uid)` 唯一键、`message_id`）。
 - 附件落盘 `DATA_DIR/attachments/<mailId>/`，文件名做了安全字符清理。
@@ -196,14 +194,14 @@ OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关�
 ## 数据与备份
 
 - 全部数据在 `DATA_DIR` 下：`mailflow.db`（SQLite，WAL 模式）与 `attachments/`。
-- 表：`settings`、`mailboxes`、`folders`、`mails`、`attachments`；外键级联删除。
+- 表：`mailboxes`、`folders`、`mails`、`attachments`；外键级联删除。
 - 只有首次初始化时 `CREATE TABLE IF NOT EXISTS`，**没有版本化迁移系统**。
 - 凭据以 `iv:tag:data` 三段 base64 存于 `password_enc` / `access_token_enc` / `refresh_token_enc` / `dingtalk_secret_enc`，密钥由 `APP_SECRET` 经 scrypt 派生。**更换 `APP_SECRET` 会导致所有已存凭据不可解密**，需重新授权/填密码。
 - 没有用户表，应用是单用户模型；登录密码只存环境变量，改密码需重启进程。
 
 ## 前端
 
-- 路由：`/login`、`/oidc-callback`（免鉴权）；`/`（三栏邮件台）、`/mailboxes`（邮箱管理）、`/settings`（设置）。守卫直接从 `localStorage.mailflow_token` 判断，401 统一清会话跳登录页。
+- 路由：`/login`、`/oidc-callback`（免鉴权）；`/`（三栏邮件台）、`/mailboxes`（邮箱管理）。守卫直接从 `localStorage.mailflow_token` 判断，401 统一清会话跳登录页。
 - 邮件正文用 `sandbox="allow-popups"` 的 iframe + `srcdoc` 渲染，**不含** `allow-scripts` / `allow-same-origin`，脚本不执行、无法读取父页存储；未使用 `v-html`，也未引入第三方净化库。
 - Token 存 `localStorage`（非 sessionStorage），跨标签页共享。
 

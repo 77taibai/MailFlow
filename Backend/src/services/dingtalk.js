@@ -1,18 +1,14 @@
 import crypto from 'node:crypto';
-import { db, getSetting } from '../db.js';
-import { decryptText } from '../crypto.js';
+import { db } from '../db.js';
 import { config } from '../config.js';
 
 const PUSH_INTERVAL_MS = 3100;
 
 export function getDingtalkConfig() {
-  let webhook = getSetting('dingtalk_webhook');
-  let secret = getSetting('dingtalk_secret_enc');
-  let enabled = getSetting('dingtalk_enabled');
   return {
-    webhook: webhook !== null && webhook !== '' ? webhook : config.dingtalkWebhook,
-    secret: secret ? decryptText(secret) : config.dingtalkSecret,
-    enabled: enabled === null ? false : enabled === '1',
+    webhook: config.dingtalkWebhook,
+    secret: config.dingtalkSecret,
+    enabled: Boolean(config.dingtalkWebhook),
   };
 }
 

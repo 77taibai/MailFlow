@@ -55,7 +55,6 @@
 
       <div class="sidebar-footer">
         <router-link to="/mailboxes"><el-button text>邮箱管理</el-button></router-link>
-        <router-link to="/settings"><el-button text>设置</el-button></router-link>
         <el-button text type="danger" @click="logout">退出</el-button>
       </div>
     </el-aside>

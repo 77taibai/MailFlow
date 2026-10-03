@@ -1,7 +1,7 @@
 ---
 feature: email-sync-server
 status: delivered
-updated: 2026-10-02
+updated: 2026-10-03
 branch: feature/email-sync
 commits: e41abc0..d8c3b01
 ---
@@ -10,15 +10,16 @@ commits: e41abc0..d8c3b01
 
 ## Report
 
-**What was built** — MailFlow：单用户自托管邮件同步服务器。后端（Express 5 + node:sqlite + imapflow + nodemailer + openid-client v6）提供：密码与 OIDC 双登录（JWT）、邮箱管理（Gmail/Outlook 仅经 OAuth2 授权一键接入，零手填，服务器/账号/凭据全部自动生成且 API 层封死手工创建；自定义 IMAP/SMTP 邮箱走表单+授权码，token/密码 AES-256-GCM 加密落库并自动刷新）、IMAP 定时同步（每文件夹回填+增量，UIDVALIDITY 重置，附件落盘）、邮件查看/批量已读未读/移动/删除（Trash 规则 + permanent 强制删）、multipart 发送（XOAUTH2 支持，Sent 副本与 message_id 去重）、钉钉加签推送（按邮箱开关 + 关键词过滤 + 48h 窗口 + 队列限速）。前端（Vue 3 + Element Plus）提供登录/OIDC 回调、三栏邮件台、邮箱管理（OAuth 授权按钮常显未配置时禁用、OAuth 邮箱仅可编辑名称/同步/钉钉）、设置页；生产模式由后端静态托管并 SPA 回退。全局同步经 promise 链串行（并发 1），每邮箱另有防重叠保护。
+**What was built** — MailFlow：单用户自托管邮件同步服务器。后端（Express 5 + node:sqlite + imapflow + nodemailer + openid-client v6）提供：密码与 OIDC 双登录（JWT）、邮箱管理（Gmail/Outlook 仅经 OAuth2 授权一键接入，零手填，服务器/账号/凭据全部自动生成且 API 层封死手工创建；自定义 IMAP/SMTP 邮箱走表单+授权码，token/密码 AES-256-GCM 加密落库并自动刷新）、IMAP 定时同步（每文件夹回填+增量，UIDVALIDITY 重置，附件落盘）、邮件查看/批量已读未读/移动/删除（Trash 规则 + permanent 强制删）、multipart 发送（XOAUTH2 支持，Sent 副本与 message_id 去重）、钉钉加签推送（`.env` 唯一配置源：填 `DINGTALK_WEBHOOK_URL` 即启用，按邮箱开关 + 关键词过滤 + 48h 窗口 + 队列限速）。前端（Vue 3 + Element Plus）提供登录/OIDC 回调、三栏邮件台、邮箱管理（OAuth 授权按钮常显未配置时禁用、OAuth 邮箱仅可编辑名称/同步/钉钉）；生产模式由后端静态托管并 SPA 回退。全局同步间隔仅来自 `.env SYNC_INTERVAL_SEC`，可按邮箱覆盖。全局同步经 promise 链串行（并发 1），每邮箱另有防重叠保护。
 
 **Verification** — 全部命令在 worktree 内执行，均观察实际输出：
 - `node --check`（后端 14 个文件，修复后复跑）— PASS
-- 后端启动 + 冒烟（health/auth 401·200/mailboxes 401·200/settings）— PASS（两轮）
+- 后端启动 + 冒烟（health/auth 401·200/mailboxes 401·200）— PASS（两轮）
 - `npm run build`（Frontend）— PASS（仅 chunk 体积警告）
 - 生产托管冒烟：root 200 HTML、SPA `/login`·`/mailboxes` 回退 200、API 不受影响 — PASS（`res.sendFile` 曾 404，已改 readFileSync）
 - API 接线回归：partial PUT 200、batch permanent/move 404/附件 404、oauth 未配置 400、创建缺字段 400、中文 UTF-8 经 node fetch 写库读回逐字一致 — PASS
 - OAuth 链路修复后冒烟 8/8：start 无 token 401、带 token 200 `{url}`（含 client_id/redirect_uri/state）、未配置服务商 400、公开 callback 伪造/缺失 state 302 至前端错误页、受保护路由不受影响 — PASS
+- 移除 Web 设置页后回归：`node --check`（后端 13 文件）— PASS；`npm run build`（Frontend，1743 modules）— PASS；全库 grep `/api/settings|SettingsView|getSetting|setSetting|settingsRouter` — 零命中；DB `settings` 表 `DROP` + `VACUUM` 成功，剩余表 `attachments, folders, mailboxes, mails, sqlite_sequence`
 - `PRE-EXISTING` 性质未验证项（需真实凭据，逻辑已经复审确认）：真实 IMAP 同步、真实 SMTP 发信、真实钉钉 webhook、Google/Microsoft/OIDC 真实 OAuth 流。
 
 **Journey log** —
@@ -33,6 +34,7 @@ commits: e41abc0..d8c3b01
 - imapflow `fetch(range, query, {uid:true})` 的 uid 选项只影响 range 解释：回填用序号区间、增量用 UID 区间，混用会错拉数据。
 - PS 5.1 `Invoke-RestMethod` 字符串 body 默认非 UTF-8 编码，中文 API 测试会被打成 `?`（服务端无关）；控制台乱码同理，验证须用 node fetch 直读 DB。
 - Express 5 下 SPA 回退用 `res.sendFile` 曾对存在文件报 404，改为启动期 readFileSync 兜底后稳定。
+- 单用户自用产品给"环境变量即可配置"的东西做 Web 设置页是过度设计：`.env` 已定义 `DINGTALK_WEBHOOK_URL` / `SYNC_INTERVAL_SEC`，再叠一层 settings 表 + `/api/settings` + SettingsView 只带来三处一致性问题（env 兜底 / 表覆盖 / UI 展示），且"改完要重启"的语义在 Web 上更模糊（Web 改的是运行时状态，但改 env 又要重启）。收敛模式：`.env` 是唯一源，Web 只暴露"必须运行时可变"的东西（当前是邮箱/文件夹/邮件本身）。移除后 `settings` 表可直接 DROP，`getSetting/setSetting` 一并删除，无迁移系统下用一次 `VACUUM + wal_checkpoint(TRUNCATE)` 收口。
 
 ## [S1] Problem
 
@@ -94,7 +96,7 @@ commits: e41abc0..d8c3b01
 
 ### 钉钉推送
 
-- 配置：`GET/PUT /api/settings`（webhook URL、加签 secret、总开关），存 settings 表（secret 加密），.env 的 `DINGTALK_WEBHOOK_URL/DINGTALK_SECRET` 作为初始兜底；`POST /api/settings/dingtalk/test` 发测试消息。
+- 配置：仅 `.env` 生效。`DINGTALK_WEBHOOK_URL` 非空即视为启用推送（无单独开关字段）；`DINGTALK_SECRET` 用作加签密钥；`SYNC_INTERVAL_SEC` 为全局默认同步间隔（可被邮箱级 `sync_interval_sec` 覆盖）。原 `GET/PUT /api/settings`、`POST /api/settings/dingtalk/test` 与 `settings` 表已移除——单用户自用场景下没有必要通过 Web 配置这两项。
 - 触发：同步中每插入一封新邮件，若 总开关 && webhook 非空 && 该邮箱 dingtalk_enabled && !seen && `mail.date` 距今 ≤ `PUSH_MAX_AGE_HOURS`（默认 48h，防首次回填轰炸） && 主题命中 include（非空时）且未命中 exclude → 推送。
 - 消息：markdown（标题"新邮件"，正文含邮箱名/发件人/主题/时间/摘要）；加签 `sign=base64(hmac-sha256(secret, "ts\nsecret"))` urlencode；内置简单队列限速（≥3s/条）。
 
@@ -107,7 +109,7 @@ commits: e41abc0..d8c3b01
 - `/login`：密码表单 + （若启用）OIDC 按钮；`/oidc-callback` 读 hash 存 token。
 - `/`：三栏邮件台 —— 左：邮箱与文件夹树（仅显示已开启同步的文件夹；含未读数、管理入口；顶部“合并账户”聚合各邮箱收件箱，默认进入）；中：邮件列表（勾选批量、未读加粗、附件图标、合并时标注来源邮箱）；右：阅读窗（详情 iframe、附件下载、已读/未读/移动/删除/回复）；撰写对话框正文用 Quill 富文本（加粗/斜体/列表/链接等），回复时以引用块预填纯文本内容。合并账户下“移动”不可用，“同步”触发全部邮箱。
 - `/mailboxes`：邮箱 CRUD、连接测试、立即同步、Gmail/Outlook OAuth 授权按钮、每邮箱钉钉开关与关键词、文件夹同步开关（对话框）。
-- `/settings`：钉钉 webhook/secret/开关/测试、全局同步间隔。
+- 无 `/settings` 页面：钉钉推送与全局同步间隔只在 `.env` 中配置，重启后端生效。
 - axios 拦截 401 → 清 token 回登录页；写信任 localStorage token。
 
 ## [S3] Out of Scope
@@ -119,11 +121,11 @@ commits: e41abc0..d8c3b01
 
 ## Tasks
 
-- [x] T1: 后端骨架 + .env.example + 数据库 schema（mailboxes/folders/mails/attachments/settings）+ 加密与鉴权中间件 + 登录/OIDC 路由 — acceptance: `npm start` 启动无错；`/api/health` 200；密码登录换取 JWT，受保护接口无 token 401；OIDC 未配置时 auth/config.oidcEnabled=false (covers: S2)
+- [x] T1: 后端骨架 + .env.example + 数据库 schema（mailboxes/folders/mails/attachments）+ 加密与鉴权中间件 + 登录/OIDC 路由 — acceptance: `npm start` 启动无错；`/api/health` 200；密码登录换取 JWT，受保护接口无 token 401；OIDC 未配置时 auth/config.oidcEnabled=false (covers: S2)
 - [x] T2: 邮箱 CRUD + 连接测试 + OAuth2 start/callback（gmail/outlook）+ token 刷新 + 文件夹列表与同步开关 — acceptance: 创建 password 邮箱入库且密码为密文；test 接口返回连通结果；oauth/start 302 到授权页；文件夹开关持久化 (covers: S2)
 - [x] T3: IMAP 同步服务（回填+增量+UIDVALIDITY 重置）+ 调度器（全局间隔/每邮箱覆盖/手动触发/并发防护）+ 附件落盘 — acceptance: 对可连通邮箱手动同步后 mails/folders 有数据、附件文件生成；重复同步不产生重复行；断网时 status=error 且记录 last_error (covers: S2)
 - [x] T4: 邮件 API：分页列表/详情/批量已读未读/移动/删除（Trash 规则/permanent 强制删）/附件下载/发送（multipart + Sent 副本） — acceptance: 全部接口在真实 IMAP 测试邮箱上行为正确；无附件邮件正常；发送后能在 Sent folder 同步回来 (covers: S2)
-- [x] T5: 钉钉服务（加签、队列限速、测试接口）+ 新邮件推送管线（开关/关键词/48h 窗口/dingtalk_pushed 去重）+ settings API — acceptance: test 接口收到测试消息（使用真实 webhook）；符合条件的同步新邮件触发一次且仅一次推送 (covers: S2)
-- [x] T6: 前端：登录/oidc 回调、三栏邮件台（列表/阅读/批量操作/附件/撰写）、邮箱管理页、设置页、路由守卫与 401 处理 — acceptance: `npm run build` 成功；dev 模式下登录→同步→读信→发信→管理全流程可操作 (covers: S2)
+- [x] T5: 钉钉服务（加签、队列限速、测试接口已随 settings API 一同移除）+ 新邮件推送管线（开关/关键词/48h 窗口/dingtalk_pushed 去重） — acceptance: 符合条件的同步新邮件触发一次且仅一次推送；钉钉配置变更通过修改 `.env` 后重启后端生效 (covers: S2)
+- [x] T6: 前端：登录/oidc 回调、三栏邮件台（列表/阅读/批量操作/附件/撰写）、邮箱管理页、路由守卫与 401 处理（无 `/settings` 页面）— acceptance: `npm run build` 成功；dev 模式下登录→同步→读信→发信→管理全流程可操作 (covers: S2)
 - [x] T7: 生产托管（express 静态 + SPA 回退）+ 冒烟验证（后端启动、健康检查、登录、未配置邮箱时页面可打开）— acceptance: build 产物由后端 3000 端口可访问且前端路由刷新不 404；全部冒烟命令 PASS (covers: S2)
 - [x] T8: Gmail/Outlook 收敛为仅 OAuth 授权添加：后端拒绝 `provider=gmail|outlook` 的手工创建（POST / 一律 400，含显式 oauth2；/test 拒绝 password 尝试）；前端表单仅用于自定义 IMAP/SMTP，OAuth 邮箱编辑仅展示名称/同步间隔/钉钉字段 — acceptance: 表单不再出现 gmail/outlook 手填路径；POST gmail+password 返回 400；OAuth 邮箱 partial PUT 保存成功且不触碰服务器字段 (covers: S2)

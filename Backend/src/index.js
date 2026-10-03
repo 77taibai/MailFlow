@@ -6,7 +6,6 @@ import { config } from './config.js';
 import { requireAuth, authRouter } from './routes/auth.js';
 import { mailboxesRouter, mailboxesOAuthPublicRouter } from './routes/mailboxes.js';
 import { mailsRouter } from './routes/mails.js';
-import { settingsRouter } from './routes/settings.js';
 import { initScheduler } from './services/scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,7 +25,6 @@ app.use('/api/mailboxes/oauth', mailboxesOAuthPublicRouter);
 app.use('/api', requireAuth);
 app.use('/api/mailboxes', mailboxesRouter);
 app.use('/api/mails', mailsRouter);
-app.use('/api/settings', settingsRouter);
 
 app.use('/api', (req, res) => {
   res.status(404).json({ error: '接口不存在' });
