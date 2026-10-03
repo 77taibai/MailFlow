@@ -12,6 +12,7 @@ const routes = [
     meta: { public: true },
   },
   { path: '/', component: () => import('../views/MailView.vue') },
+  { path: '/compose', component: () => import('../views/ComposeView.vue') },
   { path: '/mailboxes', component: () => import('../views/MailboxesView.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];

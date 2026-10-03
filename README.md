@@ -9,7 +9,7 @@
 - **多邮箱同步**：IMAP 增量同步，按 UID 追踪游标，感知 `UIDVALIDITY` 变化自动重建；首次同步回填每文件夹最新 N 封（默认 50）。
 - **任意 IMAP/SMTP 邮箱**：表单手填服务器与授权码，保存前可测试 IMAP 登录 + SMTP 连通。
 - **Gmail / Outlook 一键授权**：OAuth2 全链路（IMAP + SMTP 双通道），服务器地址、账号、凭据自动生成，无需手填；access token 到期前自动用 refresh token 刷新。
-- **邮件收发**：分页浏览、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
+- **邮件收发**：分页浏览、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill，正文编辑器支持全屏编辑）、标签式收件人/抄送输入（空格/逗号/分号分隔，粘贴可批量拆分、标签可就地编辑）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
 - **登录**：用户名密码（默认 `admin`）与自有 OIDC 单点登录二选一，JWT 会话（默认 7 天），登录接口内存限速 10 次/分钟/IP。
 - **钉钉推送**：全局 `.env` 配置（填 webhook 即启用），每邮箱独立开关，主题关键词白/黑名单，最大年龄窗口（默认 48h，防止首次回填轰炸），加签、队列限速防频控。
 - **敏感数据加密**：邮箱密码、OAuth token、钉钉 secret 全部 AES-256-GCM 加密落库。
@@ -43,8 +43,8 @@ MailFlow/
 │   └── package.json
 ├── Frontend/
 │   ├── src/
-│   │   ├── views/            # Login / OidcCallback / Mail / Mailboxes
-│   │   ├── components/       # ComposeDialog / RichTextEditor / MailboxFormDialog / MailList / MailReader
+│   │   ├── views/            # Login / OidcCallback / Mail / Compose / Mailboxes
+│   │   ├── components/       # RichTextEditor / TagInput / MailboxFormDialog / MailList / MailReader
 │   │   ├── stores/auth.js    # 登录态（Pinia）
 │   │   ├── router/index.js   # 路由表与 token 守卫
 │   │   ├── api.js            # axios 封装（Bearer 注入、401 处理、blob 下载）
@@ -201,7 +201,7 @@ OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关�
 
 ## 前端
 
-- 路由：`/login`、`/oidc-callback`（免鉴权）；`/`（三栏邮件台）、`/mailboxes`（邮箱管理）。守卫直接从 `localStorage.mailflow_token` 判断，401 统一清会话跳登录页。
+- 路由：`/login`、`/oidc-callback`（免鉴权）；`/`（三栏邮件台）、`/compose`（独立撰写页，`?mailbox=<id>` 预选发件邮箱、`?reply=<id>` 预填回复）、`/mailboxes`（邮箱管理）。守卫直接从 `localStorage.mailflow_token` 判断，401 统一清会话跳登录页。
 - 邮件正文用 `sandbox="allow-popups"` 的 iframe + `srcdoc` 渲染，**不含** `allow-scripts` / `allow-same-origin`，脚本不执行、无法读取父页存储；未使用 `v-html`，也未引入第三方净化库。
 - Token 存 `localStorage`（非 sessionStorage），跨标签页共享。
 

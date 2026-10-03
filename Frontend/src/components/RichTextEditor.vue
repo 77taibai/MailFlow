@@ -1,12 +1,18 @@
 <template>
-  <div class="rich-editor">
+  <div class="rich-editor" :class="{ 'is-fullscreen': fullscreen }">
+    <div class="editor-bar">
+      <el-button text size="small" :icon="fullscreen ? Close : FullScreen" @click="toggleFullscreen">
+        {{ fullscreen ? '退出全屏' : '全屏' }}
+      </el-button>
+    </div>
     <div ref="editorEl"></div>
   </div>
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Quill from 'quill';
+import { FullScreen, Close } from '@element-plus/icons-vue';
 import 'quill/dist/quill.snow.css';
 
 const props = defineProps({
@@ -17,6 +23,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue']);
 
 const editorEl = ref(null);
+const fullscreen = ref(false);
 let quill = null;
 let updatingFromProp = false;
 
@@ -86,6 +93,16 @@ function setContent(html) {
   updatingFromProp = false;
 }
 
+function toggleFullscreen() {
+  fullscreen.value = !fullscreen.value;
+  document.body.style.overflow = fullscreen.value ? 'hidden' : '';
+  if (fullscreen.value) nextTick(() => quill?.focus());
+}
+
+function onKeydown(e) {
+  if (e.key === 'Escape' && fullscreen.value) toggleFullscreen();
+}
+
 onMounted(() => {
   quill = new Quill(editorEl.value, {
     theme: 'snow',
@@ -99,6 +116,7 @@ onMounted(() => {
     const html = currentHtml();
     if (html !== props.modelValue) emit('update:modelValue', html);
   });
+  window.addEventListener('keydown', onKeydown);
 });
 
 watch(
@@ -110,6 +128,8 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown);
+  document.body.style.overflow = '';
   quill = null;
 });
 
@@ -123,6 +143,11 @@ defineExpose({ getText });
 <style scoped>
 .rich-editor {
   width: 100%;
+}
+.editor-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 2px;
 }
 .rich-editor :deep(.ql-toolbar) {
   border-top-left-radius: 4px;
@@ -149,6 +174,34 @@ defineExpose({ getText });
 .rich-editor :deep(.ql-editor) {
   min-height: 200px;
   max-height: 420px;
+  overflow-y: auto;
+}
+.rich-editor.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  background: #fff;
+}
+.rich-editor.is-fullscreen .editor-bar {
+  flex: none;
+  margin-bottom: 8px;
+}
+.rich-editor.is-fullscreen :deep(.ql-toolbar) {
+  flex: none;
+}
+.rich-editor.is-fullscreen :deep(.ql-container) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rich-editor.is-fullscreen :deep(.ql-editor) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
 }
 @media (max-width: 767.98px) {

@@ -83,8 +83,6 @@
       />
     </el-drawer>
 
-    <compose-dialog ref="composeRef" :mailboxes="mailboxes" />
-
     <el-dialog v-model="moveDialogVisible" title="移动到文件夹" width="360px">
       <el-select v-model="moveTarget" placeholder="选择目标文件夹" style="width: 100%">
         <el-option
@@ -113,7 +111,6 @@ import { useIsMobile } from '../composables/useIsMobile.js';
 import MailSidebar from '../components/MailSidebar.vue';
 import MailList from '../components/MailList.vue';
 import MailReader from '../components/MailReader.vue';
-import ComposeDialog from '../components/ComposeDialog.vue';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -133,7 +130,6 @@ const selectedIds = ref([]);
 const currentMail = ref(null);
 const listLoading = ref(false);
 const syncing = ref(false);
-const composeRef = ref();
 const moveDialogVisible = ref(false);
 const moveTarget = ref(null);
 const sidebarOpen = ref(false);
@@ -357,11 +353,17 @@ async function batchDelete() {
 }
 
 function openCompose() {
-  composeRef.value.open(null);
+  if (mergedSelected.value) {
+    router.push('/compose');
+    return;
+  }
+  router.push({ path: '/compose', query: { mailbox: selectedMailboxId.value } });
 }
 
 function prefillReply(mail) {
-  composeRef.value.open(mail);
+  const query = { reply: mail.id };
+  if (!mergedSelected.value && selectedMailboxId.value) query.mailbox = selectedMailboxId.value;
+  router.push({ path: '/compose', query });
 }
 
 async function onMailDeleted() {
