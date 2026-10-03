@@ -20,6 +20,9 @@
         <div class="row-line2">
           <span class="subject">{{ m.subject || '(无主题)' }}</span>
           <el-icon v-if="m.has_attachments" :size="14" class="clip"><Paperclip /></el-icon>
+          <el-tag v-if="m.mailbox_name" size="small" class="mb-tag" :title="m.mailbox_name">
+            {{ m.mailbox_name }}
+          </el-tag>
         </div>
         <div class="snippet">{{ m.snippet }}</div>
       </div>
@@ -94,6 +97,8 @@ defineEmits(['toggle', 'open']);
   margin-top: 2px;
 }
 .subject {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -102,6 +107,18 @@ defineEmits(['toggle', 'open']);
 .clip {
   color: #e6a23c;
   flex-shrink: 0;
+}
+.mb-tag {
+  flex-shrink: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #909399;
+}
+.mb-tag :deep(.el-tag__content) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .snippet {
   font-size: 12px;

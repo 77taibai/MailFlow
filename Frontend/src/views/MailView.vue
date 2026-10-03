@@ -9,6 +9,14 @@
       <div class="section-title">邮箱</div>
       <el-scrollbar max-height="180px">
         <div
+          class="mailbox-item"
+          :class="{ active: mergedSelected }"
+          @click="selectMerged"
+        >
+          <span class="mb-name">合并账户</span>
+          <el-badge v-if="mergedUnread" :value="mergedUnread" :max="99" />
+        </div>
+        <div
           v-for="mb in mailboxes"
           :key="mb.id"
           class="mailbox-item"
@@ -25,18 +33,24 @@
 
       <div class="section-title">文件夹</div>
       <el-scrollbar class="folder-scroll">
-        <div
-          v-for="f in folders"
-          :key="f.id"
-          class="folder-item"
-          :class="{ active: f.id === selectedFolderId }"
-          @click="selectFolder(f.id)"
-        >
+        <div v-if="mergedSelected" class="folder-item active">
           <el-icon><Folder /></el-icon>
-          <span class="folder-name">{{ folderDisplayName(f) }}</span>
-          <el-badge v-if="f.unread" :value="f.unread" :max="99" />
+          <span class="folder-name">收件箱</span>
         </div>
-        <div v-if="!folders.length" class="empty-tip">暂无显示中的文件夹，可在邮箱管理 → 文件夹 中开启同步</div>
+        <template v-else>
+          <div
+            v-for="f in folders"
+            :key="f.id"
+            class="folder-item"
+            :class="{ active: f.id === selectedFolderId }"
+            @click="selectFolder(f.id)"
+          >
+            <el-icon><Folder /></el-icon>
+            <span class="folder-name">{{ folderDisplayName(f) }}</span>
+            <el-badge v-if="f.unread" :value="f.unread" :max="99" />
+          </div>
+          <div v-if="!folders.length" class="empty-tip">暂无显示中的文件夹，可在邮箱管理 → 文件夹 中开启同步</div>
+        </template>
       </el-scrollbar>
 
       <div class="sidebar-footer">
@@ -48,12 +62,12 @@
 
     <el-main class="list-pane">
       <div class="list-toolbar">
-        <el-button :icon="Refresh" size="small" :loading="syncing" :disabled="!selectedMailboxId" @click="syncNow">
+        <el-button :icon="Refresh" size="small" :loading="syncing" :disabled="!selectedMailboxId && !mergedSelected" @click="syncNow">
           同步
         </el-button>
         <el-button size="small" :disabled="!selectedIds.length" @click="batchSeen(true)">标记已读</el-button>
         <el-button size="small" :disabled="!selectedIds.length" @click="batchSeen(false)">标记未读</el-button>
-        <el-button size="small" :disabled="!selectedIds.length" @click="moveDialogVisible = true">移动</el-button>
+        <el-button size="small" :disabled="!selectedIds.length || mergedSelected" @click="moveDialogVisible = true">移动</el-button>
         <el-button size="small" type="danger" :disabled="!selectedIds.length" @click="batchDelete">删除</el-button>
         <div class="spacer"></div>
         <el-pagination
@@ -116,6 +130,8 @@ const router = useRouter();
 const auth = useAuthStore();
 
 const mailboxes = ref([]);
+const mergedSelected = ref(true);
+const mergedUnread = ref(0);
 const selectedMailboxId = ref(null);
 const folders = ref([]);
 const selectedFolderId = ref(null);
@@ -143,6 +159,8 @@ function folderDisplayName(f) {
 async function loadMailboxes() {
   const data = await api.get('/mailboxes');
   mailboxes.value = data.items;
+  mergedUnread.value = data.mergedUnread || 0;
+  if (mergedSelected.value) return;
   if (!selectedMailboxId.value && data.items.length) {
     selectMailbox(data.items[0].id);
   } else if (selectedMailboxId.value) {
@@ -151,7 +169,19 @@ async function loadMailboxes() {
   }
 }
 
+function selectMerged() {
+  mergedSelected.value = true;
+  selectedMailboxId.value = null;
+  selectedFolderId.value = null;
+  folders.value = [];
+  currentMail.value = null;
+  selectedIds.value = [];
+  page.value = 1;
+  loadMails();
+}
+
 function selectMailbox(id) {
+  mergedSelected.value = false;
   selectedMailboxId.value = id;
   selectedFolderId.value = null;
   currentMail.value = null;
@@ -160,7 +190,7 @@ function selectMailbox(id) {
 }
 
 async function loadFolders() {
-  if (!selectedMailboxId.value) return;
+  if (mergedSelected.value || !selectedMailboxId.value) return;
   const data = await api.get(`/mailboxes/${selectedMailboxId.value}/folders`);
   folders.value = data.items.filter((f) => f.syncEnabled);
   const current = folders.value.find((f) => f.id === selectedFolderId.value);
@@ -188,9 +218,17 @@ function selectFolder(id) {
 }
 
 async function loadMails() {
-  if (!selectedMailboxId.value || !selectedFolderId.value) return;
   listLoading.value = true;
   try {
+    if (mergedSelected.value) {
+      const data = await api.get('/mails', {
+        params: { scope: 'merged-inbox', page: page.value, pageSize },
+      });
+      mails.value = data.items;
+      total.value = data.total;
+      return;
+    }
+    if (!selectedMailboxId.value || !selectedFolderId.value) return;
     const data = await api.get('/mails', {
       params: {
         mailboxId: selectedMailboxId.value,
@@ -210,11 +248,25 @@ async function loadMails() {
 
 async function refreshAll() {
   await loadMailboxes();
-  await loadFolders();
+  if (!mergedSelected.value) await loadFolders();
   await loadMails();
 }
 
 async function syncNow() {
+  if (mergedSelected.value) {
+    if (!mailboxes.value.length) return;
+    syncing.value = true;
+    try {
+      await Promise.all(mailboxes.value.map((mb) => api.post(`/mailboxes/${mb.id}/sync`)));
+      ElMessage.success('已触发全部邮箱同步');
+      setTimeout(refreshAll, 3000);
+    } catch (e) {
+      ElMessage.error(errMsg(e));
+    } finally {
+      syncing.value = false;
+    }
+    return;
+  }
   if (!selectedMailboxId.value) return;
   syncing.value = true;
   try {
@@ -258,6 +310,7 @@ async function batchSeen(seen) {
     selectedIds.value = [];
     await loadMails();
     loadFolders();
+    loadMailboxes();
   } catch (e) {
     ElMessage.error(errMsg(e));
   }
@@ -316,6 +369,7 @@ function logout() {
 onMounted(() => {
   auth.fetchMe();
   loadMailboxes();
+  selectMerged();
 });
 </script>
 

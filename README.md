@@ -9,7 +9,7 @@
 - **多邮箱同步**：IMAP 增量同步，按 UID 追踪游标，感知 `UIDVALIDITY` 变化自动重建；首次同步回填每文件夹最新 N 封（默认 50）。
 - **任意 IMAP/SMTP 邮箱**：表单手填服务器与授权码，保存前可测试 IMAP 登录 + SMTP 连通。
 - **Gmail / Outlook 一键授权**：OAuth2 全链路（IMAP + SMTP 双通道），服务器地址、账号、凭据自动生成，无需手填；access token 到期前自动用 refresh token 刷新。
-- **邮件收发**：分页浏览、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。
+- **邮件收发**：分页浏览、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
 - **登录**：用户名密码（默认 `admin`）与自有 OIDC 单点登录二选一，JWT 会话（默认 7 天），登录接口内存限速 10 次/分钟/IP。
 - **钉钉推送**：全局 + 每邮箱双开关，主题关键词白/黑名单，最大年龄窗口（默认 48h，防止首次回填轰炸），加签、队列限速防频控。
 - **敏感数据加密**：邮箱密码、OAuth token、钉钉 secret 全部 AES-256-GCM 加密落库。
@@ -178,7 +178,7 @@ OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关�
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/mails` | 分页列表，query：`mailboxId`(必填)、`folderId?`、`seen?`、`page?`、`pageSize?`(默认 20，上限 100) |
+| GET | `/api/mails` | 分页列表，query：`mailboxId`(默认必填)、`folderId?`、`seen?`、`page?`、`pageSize?`(默认 20，上限 100)。改用 `scope=merged-inbox` 时无需 `mailboxId`，聚合所有邮箱收件箱 |
 | GET | `/api/mails/:id` | 详情（含正文与附件元数据） |
 | GET | `/api/mails/:id/attachments/:attachmentId` | 附件流式下载 |
 | PATCH | `/api/mails/:id` | 改已读状态 |

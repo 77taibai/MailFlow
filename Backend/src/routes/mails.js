@@ -23,7 +23,38 @@ function getFolder(id) {
 }
 
 mailsRouter.get('/', (req, res) => {
-  const { mailboxId, folderId, seen } = req.query;
+  const { mailboxId, folderId, seen, scope } = req.query;
+
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
+
+  if (scope === 'merged-inbox') {
+    const where = ["(f.special_use = '\\Inbox' OR f.path = 'INBOX')"];
+    const params = [];
+    if (seen === '0' || seen === '1') {
+      where.push('m.seen = ?');
+      params.push(Number(seen));
+    }
+    const totalRow = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM mails m JOIN folders f ON f.id = m.folder_id
+         WHERE ${where.join(' AND ')}`
+      )
+      .get(...params);
+    const items = db
+      .prepare(
+        `SELECT m.id, m.uid, m.subject, m.from_name, m.from_addr, m.date, m.snippet, m.seen,
+                m.has_attachments, m.size, m.folder_id, m.mailbox_id, mb.name AS mailbox_name
+         FROM mails m
+         JOIN folders f ON f.id = m.folder_id
+         JOIN mailboxes mb ON mb.id = m.mailbox_id
+         WHERE ${where.join(' AND ')}
+         ORDER BY m.date DESC, m.id DESC LIMIT ? OFFSET ?`
+      )
+      .all(...params, pageSize, (page - 1) * pageSize);
+    return res.json({ total: totalRow.n, page, pageSize, items });
+  }
+
   if (!mailboxId) return res.status(400).json({ error: '缺少 mailboxId' });
 
   const where = ['m.mailbox_id = ?'];
@@ -36,9 +67,6 @@ mailsRouter.get('/', (req, res) => {
     where.push('m.seen = ?');
     params.push(Number(seen));
   }
-
-  const page = Math.max(1, Number(req.query.page) || 1);
-  const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
 
   const totalRow = db
     .prepare(`SELECT COUNT(*) AS n FROM mails m WHERE ${where.join(' AND ')}`)

@@ -42,6 +42,12 @@ mailboxesRouter.get('/', (req, res) => {
     gmail: oauthProviderEnabled('gmail'),
     outlook: oauthProviderEnabled('outlook'),
   };
+  const mergedUnread = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM mails m JOIN folders f ON f.id = m.folder_id
+       WHERE m.seen = 0 AND (f.special_use = '\\Inbox' OR f.path = 'INBOX')`
+    )
+    .get().n;
   res.json({
     items: mailboxes.map((mb) => ({
       id: mb.id,
@@ -67,6 +73,7 @@ mailboxesRouter.get('/', (req, res) => {
       totalCount: totalMap[mb.id] || 0,
     })),
     oauth,
+    mergedUnread,
   });
 });
 

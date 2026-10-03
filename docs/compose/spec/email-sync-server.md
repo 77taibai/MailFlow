@@ -81,7 +81,7 @@ commits: e41abc0..d8c3b01
 
 ### 查看/管理邮件
 
-- 列表 `GET /api/mails?mailboxId&folder&seen&page&pageSize`：分页（默认 20，按 date desc），返回摘要字段。
+- 列表 `GET /api/mails?mailboxId&folder&seen&page&pageSize`：分页（默认 20，按 date desc），返回摘要字段。虚拟合并账户用 `scope=merged-inbox`（无需 mailboxId）：`mails JOIN folders`，仅取 `special_use='\Inbox' OR path='INBOX'`，跨邮箱按 date desc 合并分页，附 `mailbox_name`；`GET /api/mailboxes` 额外返回 `mergedUnread` 供角标。
 - 详情 `GET /api/mails/:id`：body_html 在前端用 `sandbox`（无 allow-scripts/allow-same-origin）iframe 渲染，防脚本执行。
 - 已读/未读：单个与批量 PATCH；同时 IMAP `messageFlagsAdd/Remove \Seen`（失败不影响本地状态，返回 warning）。
 - 移动：本地改 folder_id + IMAP `messageMove`；删除：有 `\Trash` specialUse folder 则移入，否则本地+服务端永久删除；`permanent=1` 直接永久删（本地记录与附件一并清）。
@@ -105,7 +105,7 @@ commits: e41abc0..d8c3b01
 ### 前端页面
 
 - `/login`：密码表单 + （若启用）OIDC 按钮；`/oidc-callback` 读 hash 存 token。
-- `/`：三栏邮件台 —— 左：邮箱与文件夹树（仅显示已开启同步的文件夹；含未读数、管理入口）；中：邮件列表（勾选批量、未读加粗、附件图标）；右：阅读窗（详情 iframe、附件下载、已读/未读/移动/删除/回复）；撰写对话框正文用 Quill 富文本（加粗/斜体/列表/链接等），回复时以引用块预填纯文本内容。
+- `/`：三栏邮件台 —— 左：邮箱与文件夹树（仅显示已开启同步的文件夹；含未读数、管理入口；顶部“合并账户”聚合各邮箱收件箱，默认进入）；中：邮件列表（勾选批量、未读加粗、附件图标、合并时标注来源邮箱）；右：阅读窗（详情 iframe、附件下载、已读/未读/移动/删除/回复）；撰写对话框正文用 Quill 富文本（加粗/斜体/列表/链接等），回复时以引用块预填纯文本内容。合并账户下“移动”不可用，“同步”触发全部邮箱。
 - `/mailboxes`：邮箱 CRUD、连接测试、立即同步、Gmail/Outlook OAuth 授权按钮、每邮箱钉钉开关与关键词、文件夹同步开关（对话框）。
 - `/settings`：钉钉 webhook/secret/开关/测试、全局同步间隔。
 - axios 拦截 401 → 清 token 回登录页；写信任 localStorage token。
