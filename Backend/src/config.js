@@ -30,6 +30,7 @@ if (!authPassword) {
 
 export const config = {
   port,
+  host: env.HOST || '',
   appUrl: (env.APP_URL || `http://localhost:${port}`).replace(/\/+$/, ''),
   frontendOrigin: (env.FRONTEND_ORIGIN || '').replace(/\/+$/, ''),
   appSecret,
@@ -37,6 +38,8 @@ export const config = {
   authUsername: env.AUTH_USERNAME || 'admin',
   authPassword,
   jwtTtlHours: num('JWT_TTL_HOURS', 168),
+  shareSecret: env.SHARE_SECRET || '',
+  shareTtlHours: num('SHARE_TTL_HOURS', 168),
   syncIntervalSec: num('SYNC_INTERVAL_SEC', 300),
   syncBackfillCount: num('SYNC_BACKFILL_COUNT', 50),
   syncOnStart: bool('SYNC_ON_START', true),

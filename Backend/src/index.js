@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { requireAuth, authRouter } from './routes/auth.js';
 import { mailboxesRouter, mailboxesOAuthPublicRouter } from './routes/mailboxes.js';
 import { mailsRouter } from './routes/mails.js';
+import { shareRouter } from './routes/share.js';
 import { initScheduler } from './services/scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,6 +22,8 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRouter);
 
 app.use('/api/mailboxes/oauth', mailboxesOAuthPublicRouter);
+
+app.use('/api/share', shareRouter);
 
 app.use('/api', requireAuth);
 app.use('/api/mailboxes', mailboxesRouter);
@@ -57,8 +60,9 @@ app.use((err, req, res, next) => {
   res.status(status).json({ error: err.message || '服务器内部错误' });
 });
 
-app.listen(config.port, () => {
-  console.log(`MailFlow 后端已启动: http://localhost:${config.port}`);
+app.listen(config.port, config.host || undefined, () => {
+  const host = config.host || '0.0.0.0';
+  console.log(`MailFlow 后端已启动: http://${host}:${config.port}`);
   console.log(`数据目录: ${config.dataDir}`);
 });
 

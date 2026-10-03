@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db, getMailbox } from '../db.js';
 import { config } from '../config.js';
+import { signShareToken } from '../crypto.js';
 import { openConnection, findSpecialFolder } from '../services/imap.js';
 import { sendMail } from '../services/smtp.js';
 
@@ -129,6 +130,18 @@ mailsRouter.get('/:id/attachments/:attachmentId', (req, res) => {
     else res.destroy();
   });
   stream.pipe(res);
+});
+
+mailsRouter.post('/:id/share', (req, res) => {
+  const mail = getMail(req.params.id);
+  if (!mail) return res.status(404).json({ error: '邮件不存在' });
+  const ttlSeconds = config.shareTtlHours > 0 ? Math.floor(config.shareTtlHours * 3600) : 0;
+  const token = signShareToken(mail.id, ttlSeconds);
+  res.json({
+    token,
+    path: `/share/${token}`,
+    expiresAt: ttlSeconds > 0 ? Date.now() + ttlSeconds * 1000 : null,
+  });
 });
 
 async function applySeenOnImap(mailbox, folder, uid, seen) {

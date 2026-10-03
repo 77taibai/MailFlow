@@ -11,10 +11,16 @@ const routes = [
     component: () => import('../views/OidcCallbackView.vue'),
     meta: { public: true },
   },
-  { path: '/', component: () => import('../views/MailView.vue') },
+  {
+    path: '/share/:token',
+    component: () => import('../views/ShareView.vue'),
+    meta: { public: true },
+  },
+  { path: '/', redirect: '/mail' },
+  { path: '/mail/:id?', name: 'mail', component: () => import('../views/MailView.vue') },
   { path: '/compose', component: () => import('../views/ComposeView.vue') },
   { path: '/mailboxes', component: () => import('../views/MailboxesView.vue') },
-  { path: '/:pathMatch(.*)*', redirect: '/' },
+  { path: '/:pathMatch(.*)*', redirect: '/mail' },
 ];
 
 const router = createRouter({

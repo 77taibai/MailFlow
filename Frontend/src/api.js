@@ -6,6 +6,12 @@ export function errMsg(e) {
 
 const api = axios.create({ baseURL: '/api', timeout: 60000 });
 
+export const shareApi = axios.create({ baseURL: '/api', timeout: 60000 });
+shareApi.interceptors.response.use(
+  (resp) => resp.data,
+  (err) => Promise.reject(err)
+);
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('mailflow_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -15,7 +21,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (resp) => resp.data,
   (err) => {
-    if (err?.response?.status === 401 && !String(err.config?.url || '').startsWith('/auth/')) {
+    if (
+      err?.response?.status === 401 &&
+      !String(err.config?.url || '').startsWith('/auth/') &&
+      !window.location.pathname.startsWith('/share')
+    ) {
       localStorage.removeItem('mailflow_token');
       if (!window.location.pathname.startsWith('/login')) {
         window.location.href = '/login';

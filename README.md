@@ -11,6 +11,8 @@
 - **Gmail / Outlook 一键授权**：OAuth2 全链路（IMAP + SMTP 双通道），服务器地址、账号、凭据自动生成，无需手填；access token 到期前自动用 refresh token 刷新。
 - **邮件收发**：分页浏览、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill，正文编辑器支持全屏编辑）、标签式收件人/抄送输入（空格/逗号/分号分隔，粘贴可批量拆分、标签可就地编辑）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
 - **登录**：用户名密码（默认 `admin`）与自有 OIDC 单点登录二选一，JWT 会话（默认 7 天），登录接口内存限速 10 次/分钟/IP。
+- **邮件地址化浏览**：打开某封邮件时地址栏变为 `/mail/<id>`，可复制该地址直达或刷新后仍停在该邮件；合并账户下点击邮件不会把左侧邮箱切换成该邮件所属邮箱。
+- **免登录分享**：登录后可为某封邮件生成带签名密钥的分享链接（`/share/<token>`）。收件人无需登录即可查看该封邮件正文与该邮件附件，看不到其它邮件、也不能改动任何设置；分享令牌与登录令牌密钥隔离、类型互斥，不能互相冒用。密钥生成与令牌格式见下文「免登录分享」。
 - **钉钉推送**：全局 `.env` 配置（填 webhook 即启用），每邮箱独立开关，主题关键词白/黑名单，最大年龄窗口（默认 48h，防止首次回填轰炸），加签、队列限速防频控。
 - **敏感数据加密**：邮箱密码、OAuth token、钉钉 secret 全部 AES-256-GCM 加密落库。
 - **同源单端口部署**：生产模式后端直接托管前端构建产物并做 SPA 回退。
@@ -37,13 +39,13 @@ MailFlow/
 │   │   ├── config.js         # 环境变量解析与必填校验
 │   │   ├── db.js             # SQLite 初始化、建表、通用查询
 │   │   ├── crypto.js         # AES-256-GCM 加解密、JWT 签发/校验、常量时间比较
-│   │   ├── routes/           # auth / mailboxes / mails
+│   │   ├── routes/           # auth / mailboxes / mails / share
 │   │   └── services/         # imap / smtp / scheduler / oauth / mailboxAuth / dingtalk
 │   ├── .env.example          # 带注释的配置模板
 │   └── package.json
 ├── Frontend/
 │   ├── src/
-│   │   ├── views/            # Login / OidcCallback / Mail / Compose / Mailboxes
+│   │   ├── views/            # Login / OidcCallback / Mail / Compose / Mailboxes / Share
 │   │   ├── components/       # RichTextEditor / TagInput / MailboxFormDialog / MailList / MailReader
 │   │   ├── stores/auth.js    # 登录态（Pinia）
 │   │   ├── router/index.js   # 路由表与 token 守卫
@@ -116,6 +118,8 @@ cd ..\Backend; npm start            # 监听 :3000，自动托管 dist 并 SPA �
 | `AUTH_USERNAME` | `admin` | 登录用户名 |
 | `AUTH_PASSWORD` | **必填** | 登录密码（明文存 env，不落库） |
 | `JWT_TTL_HOURS` | `168` | 登录态有效期（小时） |
+| `SHARE_SECRET` | 空 | 分享链接签名密钥；留空则从 `APP_SECRET` 用独立 salt 派生 |
+| `SHARE_TTL_HOURS` | `168` | 分享链接有效期（小时），`0` 表示永不过期 |
 | `SYNC_INTERVAL_SEC` | `300` | 全局默认同步间隔（秒，最小 30） |
 | `SYNC_BACKFILL_COUNT` | `50` | 首次回填每文件夹最新邮件数 |
 | `SYNC_ON_START` | `1` | 启动 30 秒后是否先跑一轮同步 |
@@ -157,6 +161,8 @@ OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关�
 | GET | `/api/auth/oidc/login` | 跳转 OIDC 授权页 |
 | GET | `/api/auth/oidc/callback` | OIDC 回调，token 经 URL fragment 回传前端 |
 | GET | `/api/mailboxes/oauth/:provider/callback` | 邮箱 OAuth 回调 |
+| GET | `/api/share/:token` | 免登录只读查看单封邮件（字段裁剪，仅该邮件） |
+| GET | `/api/share/:token/attachments/:attachmentId` | 免登录下载该邮件的附件 |
 
 **邮箱**
 
@@ -179,9 +185,44 @@ OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关�
 | GET | `/api/mails` | 分页列表，query：`mailboxId`(默认必填)、`folderId?`、`seen?`、`page?`、`pageSize?`(默认 20，上限 100)。改用 `scope=merged-inbox` 时无需 `mailboxId`，聚合所有邮箱收件箱 |
 | GET | `/api/mails/:id` | 详情（含正文与附件元数据） |
 | GET | `/api/mails/:id/attachments/:attachmentId` | 附件流式下载 |
+| POST | `/api/mails/:id/share` | 生成该邮件的免登录分享链接，返回 `{ token, path, expiresAt }` |
 | PATCH | `/api/mails/:id` | 改已读状态 |
 | POST | `/api/mails/batch` | 批量 `seen` / `unseen` / `move` / `delete`（`permanent` 强制永久删） |
 | POST | `/api/mails/send` | multipart 发送（`to`/`cc`/`subject`/`text`/`html` + 附件，附件最多 10 个、单个 25MB；仅传 `html` 时后端自动生成纯文本备选） |
+
+## 免登录分享
+
+登录后在阅读窗点「分享」即可复制形如 `https://<你的域名>/share/<token>` 的链接。收件人无需登录，只能查看 token 对应的那一封邮件及其附件；页面只读，无法访问其它邮件或任何设置。
+
+### 密钥生成（可自行复现）
+
+分享 token 用独立密钥签名，与会话 JWT 的密钥分离：
+
+- 推荐单独设置 `SHARE_SECRET`（留空时回退用 `APP_SECRET` 派生）。生成强随机值：
+
+  ```powershell
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  ```
+
+  把输出填入 `Backend\.env` 的 `SHARE_SECRET`，重启后端生效。轮换该值会让所有旧分享链接立即失效。
+- 分享密钥推导：`shareKey = scrypt(SHARE_SECRET || APP_SECRET, 'mailflow-share-v1', 32)`（Node `crypto.scryptSync`，默认参数，输出 32 字节）。
+- token 结构：`HS256` JWT，payload `{ typ: 'share', mid: <mailId>, iat, exp? }`；`SHARE_TTL_HOURS=0` 时不带 `exp`。签名与校验都显式限定 `algorithms: ['HS256']`。
+
+### 手工生成分享链接（不使用界面时）
+
+在 `Backend/` 目录下执行（自动读取 `.env`）：
+
+```powershell
+node --input-type=module -e "import { signShareToken } from './src/crypto.js'; console.log('/share/' + signShareToken(123, 0));"
+```
+
+把 `123` 换成目标邮件 id、第二个参数换成有效期秒数（`0` 为永不过期），输出拼到站点根地址即可。
+
+### 安全边界
+
+- 分享 token 与登录 token 使用不同密钥（`scrypt(...,'mailflow-share-v1')` 对 `APP_SECRET` 原始值），且分别校验 `typ`：登录接口显式拒绝 `typ === 'share'` 的令牌，分享接口显式要求 `typ === 'share'`，二者不可互相冒用。
+- 校验算法固定 `HS256`，不启用 `none`、不省略 `algorithms`。
+- 分享链路只按 token 内的 `mid` 读取一封邮件；附件必须属于该邮件，否则 404。
 
 ## 同步机制
 
@@ -201,7 +242,7 @@ OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关�
 
 ## 前端
 
-- 路由：`/login`、`/oidc-callback`（免鉴权）；`/`（三栏邮件台）、`/compose`（独立撰写页，`?mailbox=<id>` 预选发件邮箱、`?reply=<id>` 预填回复）、`/mailboxes`（邮箱管理）。守卫直接从 `localStorage.mailflow_token` 判断，401 统一清会话跳登录页。
+- 路由：`/login`、`/oidc-callback`、`/share/:token`（免鉴权）；`/` 重定向到 `/mail`，`/mail/:id?`（三栏邮件台，带 id 时打开该邮件；翻页/文件夹/邮箱上下文留在组件内存，刷新回到合并账户 + 该邮件）、`/compose`（独立撰写页，`?mailbox=<id>` 预选发件邮箱、`?reply=<id>` 预填回复）、`/mailboxes`（邮箱管理）。守卫直接从 `localStorage.mailflow_token` 判断，401 统一清会话跳登录页；`/share` 页面用不带鉴权的独立 axios 实例，出错只提示不跳登录。
 - 邮件正文用 `sandbox="allow-popups"` 的 iframe + `srcdoc` 渲染，**不含** `allow-scripts` / `allow-same-origin`，脚本不执行、无法读取父页存储；未使用 `v-html`，也未引入第三方净化库。
 - Token 存 `localStorage`（非 sessionStorage），跨标签页共享。
 
@@ -221,6 +262,7 @@ OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关�
 ## 安全提示
 
 - `APP_SECRET` 与 `AUTH_PASSWORD` 必须改为强随机值，二者决定会话签名与全部加密凭据。
+- `SHARE_SECRET` 决定分享链接签名；未单独设置时会从 `APP_SECRET` 派生。分享密钥与会话密钥隔离，分享令牌无法用于登录。
 - `.env` 已在 `.gitignore` 中，切勿提交；`DATA_DIR` 亦被忽略。
 - 部署到公网前请确认：改默认密码、用 HTTPS 反代、限制 3000 端口的来源。
 

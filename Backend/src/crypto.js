@@ -4,6 +4,8 @@ import { config } from './config.js';
 
 const encKey = crypto.scryptSync(config.appSecret, 'mailflow-enc-v1', 32);
 
+const shareKey = crypto.scryptSync(config.shareSecret || config.appSecret, 'mailflow-share-v1', 32);
+
 export function encryptText(plain) {
   if (plain === null || plain === undefined || plain === '') return null;
   const iv = crypto.randomBytes(12);
@@ -31,13 +33,27 @@ export function safeEqual(a, b) {
 }
 
 export function signToken(payload, ttlSeconds) {
-  return jwt.sign(payload, config.appSecret, { expiresIn: ttlSeconds });
+  return jwt.sign(payload, config.appSecret, { algorithm: 'HS256', expiresIn: ttlSeconds });
 }
 
 export function verifyToken(token) {
-  return jwt.verify(token, config.appSecret);
+  return jwt.verify(token, config.appSecret, { algorithms: ['HS256'] });
 }
 
 export function signSession(username, via) {
   return signToken({ sub: username, via }, config.jwtTtlHours * 3600);
+}
+
+export function signShareToken(mailId, ttlSeconds = 0) {
+  const options = { algorithm: 'HS256' };
+  if (ttlSeconds > 0) options.expiresIn = ttlSeconds;
+  return jwt.sign({ typ: 'share', mid: Number(mailId) }, shareKey, options);
+}
+
+export function verifyShareToken(token) {
+  const payload = jwt.verify(token, shareKey, { algorithms: ['HS256'] });
+  if (!payload || payload.typ !== 'share') throw new Error('分享令牌无效');
+  const mid = Number(payload.mid);
+  if (!Number.isInteger(mid) || mid <= 0) throw new Error('分享令牌无效');
+  return { mailId: mid };
 }

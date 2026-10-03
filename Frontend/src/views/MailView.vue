@@ -57,7 +57,7 @@
 
     <el-main class="reader-pane" v-show="!isMobile || currentMail">
       <div class="mobile-bar reader-back" v-if="isMobile && currentMail">
-        <el-button :icon="ArrowLeft" text @click="currentMail = null" />
+        <el-button :icon="ArrowLeft" text @click="closeMail" />
       </div>
       <mail-reader :mail="currentMail" @refresh="loadMails" @reply="prefillReply" @deleted="onMailDeleted" />
     </el-main>
@@ -102,7 +102,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Refresh, EditPen, Menu, ArrowLeft } from '@element-plus/icons-vue';
 import api, { errMsg } from '../api.js';
@@ -112,6 +112,7 @@ import MailSidebar from '../components/MailSidebar.vue';
 import MailList from '../components/MailList.vue';
 import MailReader from '../components/MailReader.vue';
 
+const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const isMobile = useIsMobile();
@@ -169,6 +170,7 @@ async function loadMailboxes() {
 }
 
 function selectMerged() {
+  clearRouteMail();
   mergedSelected.value = true;
   selectedMailboxId.value = null;
   selectedFolderId.value = null;
@@ -180,6 +182,7 @@ function selectMerged() {
 }
 
 function selectMailbox(id) {
+  clearRouteMail();
   mergedSelected.value = false;
   selectedMailboxId.value = id;
   selectedFolderId.value = null;
@@ -209,6 +212,7 @@ async function loadFolders() {
 }
 
 function selectFolder(id) {
+  clearRouteMail();
   selectedFolderId.value = id;
   page.value = 1;
   currentMail.value = null;
@@ -287,20 +291,61 @@ function toggleSelect(id, checked) {
   }
 }
 
-async function openMail(mail) {
+function clearRouteMail() {
+  if (route.params.id && currentMail.value) router.replace({ name: 'mail' });
+}
+
+function closeMail() {
+  if (route.params.id) router.replace({ name: 'mail' });
+  else currentMail.value = null;
+}
+
+function openMail(mail) {
+  if (Number(route.params.id) === mail.id) return;
+  router.push({ name: 'mail', params: { id: String(mail.id) } });
+}
+
+let mailLoadSeq = 0;
+
+async function loadMailById(id) {
+  if (!Number.isInteger(id) || id <= 0) {
+    currentMail.value = null;
+    if (route.params.id) router.replace({ name: 'mail' });
+    return;
+  }
+  const seq = ++mailLoadSeq;
   try {
-    const data = await api.get(`/mails/${mail.id}`);
+    const data = await api.get(`/mails/${id}`);
+    if (seq !== mailLoadSeq || Number(route.params.id) !== id) return;
     currentMail.value = data;
-    if (!mail.seen) {
-      mail.seen = true;
-      await api.patch(`/mails/${mail.id}`, { seen: true });
+    if (!data.seen) {
+      await api.patch(`/mails/${id}`, { seen: true });
+      if (seq !== mailLoadSeq) return;
+      data.seen = true;
+      const row = mails.value.find((m) => m.id === id);
+      if (row) row.seen = true;
       loadFolders();
       loadMailboxes();
     }
   } catch (e) {
+    if (seq !== mailLoadSeq) return;
     ElMessage.error(errMsg(e));
+    if (route.params.id) router.replace({ name: 'mail' });
   }
 }
+
+watch(
+  () => route.params.id,
+  (id) => {
+    if (id === undefined || id === null || id === '') {
+      mailLoadSeq += 1;
+      currentMail.value = null;
+      return;
+    }
+    loadMailById(Number(id));
+  },
+  { immediate: true }
+);
 
 async function batchSeen(seen) {
   try {
@@ -367,6 +412,7 @@ function prefillReply(mail) {
 }
 
 async function onMailDeleted() {
+  if (route.params.id) router.replace({ name: 'mail' });
   currentMail.value = null;
   await refreshAll();
 }

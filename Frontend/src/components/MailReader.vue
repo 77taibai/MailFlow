@@ -8,6 +8,9 @@
             <el-tooltip content="回复">
               <el-button :icon="EditPen" text @click="$emit('reply', mail)" />
             </el-tooltip>
+            <el-tooltip content="分享">
+              <el-button :icon="Share" text @click="shareMail" />
+            </el-tooltip>
             <el-tooltip :content="mail.seen ? '标记未读' : '标记已读'">
               <el-button :icon="mail.seen ? View : Hide" text @click="toggleSeen" />
             </el-tooltip>
@@ -53,7 +56,7 @@
 <script setup>
 import { computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { EditPen, Delete, View, Hide } from '@element-plus/icons-vue';
+import { EditPen, Delete, View, Hide, Share } from '@element-plus/icons-vue';
 import api, { downloadToBlob, errMsg } from '../api.js';
 import { formatDateTime, formatBytes } from '../utils.js';
 
@@ -83,6 +86,21 @@ async function deleteMail() {
     await api.post('/mails/batch', { ids: [props.mail.id], action: 'delete' });
     ElMessage.success('已删除');
     emit('deleted');
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  }
+}
+
+async function shareMail() {
+  try {
+    const data = await api.post(`/mails/${props.mail.id}/share`);
+    const url = new URL(data.path, window.location.origin).href;
+    try {
+      await navigator.clipboard.writeText(url);
+      ElMessage.success('分享链接已复制');
+    } catch {
+      await ElMessageBox.alert(url, '分享链接', { confirmButtonText: '关闭' });
+    }
   } catch (e) {
     ElMessage.error(errMsg(e));
   }

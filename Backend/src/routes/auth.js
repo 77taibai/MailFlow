@@ -9,7 +9,9 @@ export function requireAuth(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: '未登录' });
   try {
-    req.user = verifyToken(token);
+    const payload = verifyToken(token);
+    if (payload.typ === 'share') return res.status(401).json({ error: '分享令牌不能用于登录' });
+    req.user = payload;
     next();
   } catch {
     return res.status(401).json({ error: '登录已过期' });
