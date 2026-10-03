@@ -141,4 +141,12 @@ defineEmits(['toggle', 'open']);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+@media (max-width: 767.98px) {
+  .mail-row {
+    padding: 10px;
+  }
+  .mb-tag {
+    max-width: 72px;
+  }
+}
 </style>

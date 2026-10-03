@@ -151,4 +151,17 @@ defineExpose({ getText });
   max-height: 420px;
   overflow-y: auto;
 }
+@media (max-width: 767.98px) {
+  .rich-editor :deep(.ql-editor) {
+    min-height: 160px;
+    max-height: none;
+  }
+  .rich-editor :deep(.ql-container) {
+    min-height: 180px;
+  }
+  .rich-editor :deep(.ql-toolbar .ql-formats) {
+    border-right: 0;
+    padding: 0 4px;
+  }
+}
 </style>

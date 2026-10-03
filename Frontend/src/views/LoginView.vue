@@ -92,7 +92,7 @@ function oidcLogin() {
   background: linear-gradient(135deg, #1f2d3d 0%, #2b4c6f 100%);
 }
 .login-card {
-  width: 380px;
+  width: min(380px, calc(100vw - 32px));
   padding: 10px 15px;
 }
 .title {

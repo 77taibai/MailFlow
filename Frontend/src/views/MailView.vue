@@ -1,65 +1,28 @@
 <template>
   <el-container class="mail-page">
-    <el-aside width="250px" class="sidebar">
-      <div class="brand">
-        <el-icon :size="20"><Message /></el-icon>
-        <span>MailFlow</span>
-      </div>
-
-      <div class="section-title">邮箱</div>
-      <el-scrollbar max-height="180px">
-        <div
-          class="mailbox-item"
-          :class="{ active: mergedSelected }"
-          @click="selectMerged"
-        >
-          <span class="mb-name">合并账户</span>
-          <el-badge v-if="mergedUnread" :value="mergedUnread" :max="99" />
-        </div>
-        <div
-          v-for="mb in mailboxes"
-          :key="mb.id"
-          class="mailbox-item"
-          :class="{ active: mb.id === selectedMailboxId }"
-          @click="selectMailbox(mb.id)"
-        >
-          <span class="mb-name">{{ mb.name }}</span>
-          <el-badge v-if="mb.unreadCount" :value="mb.unreadCount" :max="99" />
-        </div>
-        <div v-if="!mailboxes.length" class="empty-tip">
-          暂无邮箱，<router-link to="/mailboxes">去添加</router-link>
-        </div>
-      </el-scrollbar>
-
-      <div class="section-title">文件夹</div>
-      <el-scrollbar class="folder-scroll">
-        <div v-if="mergedSelected" class="folder-item active">
-          <el-icon><Folder /></el-icon>
-          <span class="folder-name">收件箱</span>
-        </div>
-        <template v-else>
-          <div
-            v-for="f in folders"
-            :key="f.id"
-            class="folder-item"
-            :class="{ active: f.id === selectedFolderId }"
-            @click="selectFolder(f.id)"
-          >
-            <el-icon><Folder /></el-icon>
-            <span class="folder-name">{{ folderDisplayName(f) }}</span>
-            <el-badge v-if="f.unread" :value="f.unread" :max="99" />
-          </div>
-          <div v-if="!folders.length" class="empty-tip">暂无显示中的文件夹，可在邮箱管理 → 编辑 → 文件夹同步 中开启同步</div>
-        </template>
-      </el-scrollbar>
-
-      <div class="sidebar-footer">
-        <router-link to="/mailboxes"><el-button text>邮箱管理</el-button></router-link>
-        <el-button text type="danger" @click="logout">退出</el-button>
-      </div>
+    <el-aside v-if="!isMobile" width="250px" class="sidebar">
+      <mail-sidebar
+        :mailboxes="mailboxes"
+        :merged-selected="mergedSelected"
+        :merged-unread="mergedUnread"
+        :selected-mailbox-id="selectedMailboxId"
+        :folders="folders"
+        :selected-folder-id="selectedFolderId"
+        @select-merged="selectMerged"
+        @select-mailbox="selectMailbox"
+        @select-folder="selectFolder"
+        @logout="logout"
+      />
     </el-aside>
 
-    <el-main class="list-pane">
+    <el-main class="list-pane" v-show="!isMobile || !currentMail">
+      <div class="mobile-bar" v-if="isMobile">
+        <el-button :icon="Menu" text @click="sidebarOpen = true" />
+        <span class="mobile-title">{{ contextTitle }}</span>
+        <el-button type="primary" :icon="EditPen" :disabled="!mailboxes.length" @click="openCompose">
+          撰写
+        </el-button>
+      </div>
       <div class="list-toolbar">
         <el-button :icon="Refresh" size="small" :loading="syncing" :disabled="!selectedMailboxId && !mergedSelected" @click="syncNow">
           同步
@@ -77,7 +40,7 @@
           small
           @current-change="loadMails"
         />
-        <el-button type="primary" :icon="EditPen" size="small" :disabled="!mailboxes.length" @click="openCompose">
+        <el-button class="compose-btn" type="primary" :icon="EditPen" size="small" :disabled="!mailboxes.length" @click="openCompose">
           撰写
         </el-button>
       </div>
@@ -92,9 +55,33 @@
       />
     </el-main>
 
-    <el-main class="reader-pane">
-      <mail-reader :mail="currentMail" @refresh="loadMails" @reply="prefillReply" />
+    <el-main class="reader-pane" v-show="!isMobile || currentMail">
+      <div class="mobile-bar reader-back" v-if="isMobile && currentMail">
+        <el-button :icon="ArrowLeft" text @click="currentMail = null" />
+      </div>
+      <mail-reader :mail="currentMail" @refresh="loadMails" @reply="prefillReply" @deleted="onMailDeleted" />
     </el-main>
+
+    <el-drawer
+      v-model="sidebarOpen"
+      direction="ltr"
+      size="80%"
+      :with-header="false"
+      class="mail-drawer"
+    >
+      <mail-sidebar
+        :mailboxes="mailboxes"
+        :merged-selected="mergedSelected"
+        :merged-unread="mergedUnread"
+        :selected-mailbox-id="selectedMailboxId"
+        :folders="folders"
+        :selected-folder-id="selectedFolderId"
+        @select-merged="onSelectMerged"
+        @select-mailbox="onSelectMailbox"
+        @select-folder="onSelectFolder"
+        @logout="onLogout"
+      />
+    </el-drawer>
 
     <compose-dialog ref="composeRef" :mailboxes="mailboxes" />
 
@@ -116,18 +103,21 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Refresh, EditPen } from '@element-plus/icons-vue';
+import { Refresh, EditPen, Menu, ArrowLeft } from '@element-plus/icons-vue';
 import api, { errMsg } from '../api.js';
 import { useAuthStore } from '../stores/auth.js';
+import { useIsMobile } from '../composables/useIsMobile.js';
+import MailSidebar from '../components/MailSidebar.vue';
 import MailList from '../components/MailList.vue';
 import MailReader from '../components/MailReader.vue';
 import ComposeDialog from '../components/ComposeDialog.vue';
 
 const router = useRouter();
 const auth = useAuthStore();
+const isMobile = useIsMobile();
 
 const mailboxes = ref([]);
 const mergedSelected = ref(true);
@@ -146,6 +136,19 @@ const syncing = ref(false);
 const composeRef = ref();
 const moveDialogVisible = ref(false);
 const moveTarget = ref(null);
+const sidebarOpen = ref(false);
+
+watch(isMobile, (mobile) => {
+  if (!mobile) sidebarOpen.value = false;
+});
+
+const contextTitle = computed(() => {
+  if (mergedSelected.value) return '合并账户';
+  const mb = mailboxes.value.find((m) => m.id === selectedMailboxId.value);
+  if (!mb) return '';
+  const f = folders.value.find((x) => x.id === selectedFolderId.value);
+  return f ? `${mb.name} / ${folderDisplayName(f)}` : mb.name;
+});
 
 function folderDisplayName(f) {
   if (f.specialUse === '\\Inbox' || f.path === 'INBOX') return '收件箱';
@@ -361,9 +364,33 @@ function prefillReply(mail) {
   composeRef.value.open(mail);
 }
 
+async function onMailDeleted() {
+  currentMail.value = null;
+  await refreshAll();
+}
+
 function logout() {
   auth.logout();
   router.replace('/login');
+}
+
+function onSelectMerged() {
+  selectMerged();
+  sidebarOpen.value = false;
+}
+
+function onSelectMailbox(id) {
+  selectMailbox(id);
+  sidebarOpen.value = false;
+}
+
+function onSelectFolder(id) {
+  selectFolder(id);
+  sidebarOpen.value = false;
+}
+
+function onLogout() {
+  logout();
 }
 
 onMounted(() => {
@@ -378,74 +405,6 @@ onMounted(() => {
   height: 100%;
   overflow: hidden;
 }
-.sidebar {
-  border-right: 1px solid #e4e7ed;
-  display: flex;
-  flex-direction: column;
-  background: #f7f8fa;
-  overflow: hidden;
-}
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 17px;
-  color: #2b4c6f;
-  padding: 14px 16px 10px;
-}
-.section-title {
-  font-size: 12px;
-  color: #909399;
-  padding: 8px 16px 4px;
-}
-.mailbox-item,
-.folder-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  cursor: pointer;
-  font-size: 14px;
-}
-.mailbox-item:hover,
-.folder-item:hover {
-  background: #ecf5ff;
-}
-.mailbox-item.active,
-.folder-item.active {
-  background: #d9ecff;
-}
-.mb-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.folder-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sidebar :deep(.el-scrollbar) {
-  height: auto;
-}
-.folder-scroll {
-  flex: 1 1 0%;
-  min-height: 0;
-}
-.empty-tip {
-  font-size: 13px;
-  color: #909399;
-  padding: 6px 16px;
-}
-.sidebar-footer {
-  border-top: 1px solid #e4e7ed;
-  padding: 6px 8px;
-  display: flex;
-  justify-content: space-between;
-}
 .list-pane {
   border-right: 1px solid #e4e7ed;
   padding: 0;
@@ -455,6 +414,20 @@ onMounted(() => {
   max-width: 460px;
   min-width: 360px;
   flex: 0 0 400px;
+}
+.mobile-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e4e7ed;
+}
+.mobile-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
 }
 .list-toolbar {
   display: flex;
@@ -470,5 +443,32 @@ onMounted(() => {
 .reader-pane {
   padding: 0;
   overflow: hidden;
+}
+@media (max-width: 767.98px) {
+  .list-pane {
+    max-width: none;
+    min-width: 0;
+    width: 100%;
+    flex: 1 1 auto;
+    border-right: none;
+  }
+  .reader-pane {
+    width: 100%;
+  }
+  .list-toolbar {
+    flex-wrap: wrap;
+  }
+  .compose-btn {
+    display: none;
+  }
+}
+</style>
+
+<style>
+.mail-drawer .el-drawer__body {
+  padding: 0;
+}
+.mail-drawer .sidebar {
+  height: 100%;
 }
 </style>

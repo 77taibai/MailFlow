@@ -3,6 +3,7 @@
     v-model="visible"
     :title="dialogTitle"
     width="640px"
+    :fullscreen="isMobile"
     :close-on-click-modal="false"
   >
     <div class="dialog-scroll">
@@ -14,7 +15,7 @@
       title="该邮箱通过 OAuth 授权接入，服务器与凭据由系统自动管理；如需更换账号，请删除后重新授权。"
     />
 
-    <el-form label-width="110px">
+    <el-form :label-position="isMobile ? 'top' : 'right'" :label-width="isMobile ? 'auto' : '110px'">
       <el-form-item label="名称" required>
         <el-input v-model="form.name" placeholder="显示名称" />
       </el-form-item>
@@ -72,7 +73,14 @@
       <template v-if="editing">
         <el-divider content-position="left">文件夹同步</el-divider>
         <p class="hint">开启同步的文件夹会定时拉取新邮件（首次开启回填最新若干封）。</p>
-        <el-table :data="folders" v-loading="foldersLoading" max-height="240">
+        <div v-if="isMobile" class="folder-list" v-loading="foldersLoading">
+          <div v-for="row in folders" :key="row.id" class="folder-item">
+            <span class="folder-path">{{ row.path }}</span>
+            <el-switch :model-value="row.syncEnabled" @change="(v) => toggleFolder(row, v)" />
+          </div>
+          <div v-if="!folders.length && !foldersLoading" class="folder-empty">暂无文件夹</div>
+        </div>
+        <el-table v-else :data="folders" v-loading="foldersLoading" max-height="240">
           <el-table-column prop="path" label="路径" min-width="200" />
           <el-table-column label="特殊用途" width="120">
             <template #default="{ row }">{{ row.specialUse || '-' }}</template>
@@ -102,10 +110,12 @@
 import { computed, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import api, { errMsg } from '../api.js';
+import { useIsMobile } from '../composables/useIsMobile.js';
 
 const emit = defineEmits(['saved']);
 
 const visible = ref(false);
+const isMobile = useIsMobile();
 const editing = ref(null);
 const saving = ref(false);
 const testing = ref(false);
@@ -279,5 +289,45 @@ defineExpose({ open });
   font-size: 13px;
   color: #909399;
   margin: 0 0 10px;
+}
+.folder-list {
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.folder-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.folder-item + .folder-item {
+  border-top: 1px solid #f2f6fc;
+}
+.folder-path {
+  min-width: 0;
+  word-break: break-all;
+}
+.folder-empty {
+  padding: 16px;
+  text-align: center;
+  color: #909399;
+  font-size: 13px;
+}
+@media (max-width: 767.98px) {
+  .host-row {
+    flex-wrap: wrap;
+  }
+  .host-row .el-input {
+    flex: 1 1 100%;
+  }
+  .host-row .el-input-number {
+    width: 100%;
+  }
+  .dialog-scroll {
+    max-height: calc(100vh - 200px);
+  }
 }
 </style>

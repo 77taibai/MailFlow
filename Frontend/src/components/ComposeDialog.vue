@@ -1,6 +1,6 @@
 <template>
-  <el-dialog v-model="visible" title="撰写邮件" width="760px" :close-on-click-modal="false">
-    <el-form label-width="70px">
+  <el-dialog v-model="visible" title="撰写邮件" width="760px" :fullscreen="isMobile" :close-on-click-modal="false">
+    <el-form :label-position="isMobile ? 'top' : 'right'" :label-width="isMobile ? 'auto' : '70px'">
       <el-form-item label="发件邮箱">
         <el-select v-model="form.mailboxId" placeholder="选择发件邮箱" style="width: 100%">
           <el-option v-for="mb in mailboxes" :key="mb.id" :label="`${mb.name} (${mb.email})`" :value="mb.id" />
@@ -46,6 +46,7 @@ import { ElMessage } from 'element-plus';
 import { Paperclip } from '@element-plus/icons-vue';
 import api, { errMsg } from '../api.js';
 import RichTextEditor from './RichTextEditor.vue';
+import { useIsMobile } from '../composables/useIsMobile.js';
 
 const props = defineProps({
   mailboxes: { type: Array, default: () => [] },
@@ -54,6 +55,7 @@ const props = defineProps({
 const emit = defineEmits(['sent']);
 
 const visible = ref(false);
+const isMobile = useIsMobile();
 const sending = ref(false);
 const fileList = ref([]);
 const editorRef = ref();

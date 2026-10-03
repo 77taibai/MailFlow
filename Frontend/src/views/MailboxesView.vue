@@ -43,7 +43,7 @@
       style="margin-bottom: 12px"
     />
 
-    <el-table :data="mailboxes" v-loading="loading">
+    <el-table v-if="!isMobile" :data="mailboxes" v-loading="loading">
       <el-table-column prop="name" label="名称" min-width="140" />
       <el-table-column prop="email" label="地址" min-width="200" />
       <el-table-column label="服务商" width="100">
@@ -85,6 +85,95 @@
       </el-table-column>
     </el-table>
 
+    <div v-else class="mobile-mailboxes">
+      <template v-if="!selectedMailbox">
+        <el-empty v-if="!mailboxes.length" description="暂无邮箱" />
+        <div v-else class="mailbox-list">
+          <div
+            v-for="row in mailboxes"
+            :key="row.id"
+            class="mailbox-row"
+            @click="selectedMailbox = row"
+          >
+            <div class="mailbox-row-main">
+              <div class="mailbox-name">{{ row.name }}</div>
+              <div class="mailbox-email">{{ row.email }}</div>
+            </div>
+            <el-tag size="small" :type="row.status === 'ok' ? 'success' : 'danger'">
+              {{ row.status === 'ok' ? '正常' : '错误' }}
+            </el-tag>
+          </div>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="detail-header">
+          <el-button :icon="ArrowLeft" circle @click="selectedMailbox = null" />
+          <span class="detail-title">{{ selectedMailbox.name }}</span>
+        </div>
+        <dl class="detail-list">
+          <div class="detail-item">
+            <dt>地址</dt>
+            <dd>{{ selectedMailbox.email }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>服务商</dt>
+            <dd>{{ providerLabel(selectedMailbox.provider) }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>认证</dt>
+            <dd>{{ selectedMailbox.authType === 'oauth2' ? 'OAuth2' : '密码' }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>状态</dt>
+            <dd>
+              <el-tooltip :content="selectedMailbox.lastError || ''" :disabled="!selectedMailbox.lastError">
+                <el-tag size="small" :type="selectedMailbox.status === 'ok' ? 'success' : 'danger'">
+                  {{ selectedMailbox.status === 'ok' ? '正常' : '错误' }}
+                </el-tag>
+              </el-tooltip>
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt>未读/总数</dt>
+            <dd>{{ selectedMailbox.unreadCount }} / {{ selectedMailbox.totalCount }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>最近同步</dt>
+            <dd>{{ formatDateTime(selectedMailbox.lastSyncAt) || '从未' }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>同步间隔</dt>
+            <dd>{{ selectedMailbox.syncIntervalSec ? selectedMailbox.syncIntervalSec + ' 秒' : '全局设置' }}</dd>
+          </div>
+          <div class="detail-item">
+            <dt>钉钉推送</dt>
+            <dd>
+              <el-tag size="small" :type="selectedMailbox.dingtalkEnabled ? 'success' : 'info'">
+                {{ selectedMailbox.dingtalkEnabled ? '启用' : '关闭' }}
+              </el-tag>
+            </dd>
+          </div>
+          <div class="detail-item">
+            <dt>推送关键词</dt>
+            <dd>
+              <template v-if="selectedMailbox.dingtalkInclude || selectedMailbox.dingtalkExclude">
+                <div v-if="selectedMailbox.dingtalkInclude">包含: {{ selectedMailbox.dingtalkInclude }}</div>
+                <div v-if="selectedMailbox.dingtalkExclude">排除: {{ selectedMailbox.dingtalkExclude }}</div>
+              </template>
+              <span v-else>-</span>
+            </dd>
+          </div>
+        </dl>
+        <div class="row-actions detail-actions">
+          <el-button size="small" @click="testMailbox(selectedMailbox)">测试</el-button>
+          <el-button size="small" :loading="selectedMailbox._syncing" @click="syncMailbox(selectedMailbox)">同步</el-button>
+          <el-button size="small" type="primary" @click="openEdit(selectedMailbox)">编辑</el-button>
+          <el-button size="small" type="danger" @click="removeMailbox(selectedMailbox)">删除</el-button>
+        </div>
+      </template>
+    </div>
+
     <mailbox-form-dialog ref="formRef" @saved="load" />
   </div>
 </template>
@@ -93,9 +182,10 @@
 import { onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Link } from '@element-plus/icons-vue';
+import { Plus, Link, ArrowLeft } from '@element-plus/icons-vue';
 import api, { errMsg } from '../api.js';
 import { formatDateTime } from '../utils.js';
+import { useIsMobile } from '../composables/useIsMobile.js';
 import MailboxFormDialog from '../components/MailboxFormDialog.vue';
 
 const route = useRoute();
@@ -103,6 +193,8 @@ const mailboxes = ref([]);
 const oauth = reactive({ gmail: false, outlook: false });
 const loading = ref(false);
 const formRef = ref();
+const isMobile = useIsMobile();
+const selectedMailbox = ref(null);
 
 function providerLabel(p) {
   if (p === 'gmail') return 'Gmail';
@@ -115,6 +207,10 @@ async function load() {
   try {
     const data = await api.get('/mailboxes');
     mailboxes.value = data.items.map((m) => ({ ...m, _syncing: false }));
+    if (selectedMailbox.value) {
+      selectedMailbox.value =
+        mailboxes.value.find((m) => m.id === selectedMailbox.value.id) || null;
+    }
     oauth.gmail = Boolean(data.oauth?.gmail);
     oauth.outlook = Boolean(data.oauth?.outlook);
   } catch (e) {
@@ -221,5 +317,84 @@ onMounted(load);
   flex: none;
   margin-left: 0;
   padding: 5px 9px;
+}
+.mailbox-list {
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+.mailbox-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  cursor: pointer;
+}
+.mailbox-row:active {
+  background: var(--el-fill-color-light);
+}
+.mailbox-row-main {
+  min-width: 0;
+}
+.mailbox-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mailbox-email {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.detail-title {
+  font-weight: 600;
+  font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail-list {
+  margin: 0;
+}
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.detail-item dt {
+  flex: none;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+.detail-item dd {
+  margin: 0;
+  min-width: 0;
+  text-align: right;
+  word-break: break-word;
+}
+.detail-actions {
+  flex-wrap: wrap;
+  padding-top: 16px;
+}
+@media (max-width: 767.98px) {
+  .page-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .header-actions {
+    flex-wrap: wrap;
+  }
 }
 </style>

@@ -61,7 +61,7 @@ const props = defineProps({
   mail: { type: Object, default: null },
 });
 
-const emit = defineEmits(['refresh', 'reply']);
+const emit = defineEmits(['refresh', 'reply', 'deleted']);
 
 async function toggleSeen() {
   try {
@@ -82,7 +82,7 @@ async function deleteMail() {
   try {
     await api.post('/mails/batch', { ids: [props.mail.id], action: 'delete' });
     ElMessage.success('已删除');
-    emit('refresh');
+    emit('deleted');
   } catch (e) {
     ElMessage.error(errMsg(e));
   }
@@ -174,5 +174,22 @@ async function download(att) {
   font-size: 14px;
   color: #303133;
   overflow: auto;
+}
+@media (max-width: 767.98px) {
+  .reader-header {
+    padding: 10px 12px;
+  }
+  .subject-line {
+    align-items: flex-start;
+  }
+  .subject {
+    white-space: normal;
+  }
+  .meta {
+    flex-wrap: wrap;
+  }
+  .text-body {
+    padding: 12px;
+  }
 }
 </style>
