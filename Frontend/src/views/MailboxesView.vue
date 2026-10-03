@@ -75,11 +75,13 @@
       </el-table-column>
       <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" @click="testMailbox(row)">测试</el-button>
-          <el-button size="small" :loading="row._syncing" @click="syncMailbox(row)">同步</el-button>
-          <el-button size="small" @click="openFolders(row)">文件夹</el-button>
-          <el-button size="small" type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="removeMailbox(row)">删除</el-button>
+          <div class="row-actions">
+            <el-button size="small" @click="testMailbox(row)">测试</el-button>
+            <el-button size="small" :loading="row._syncing" @click="syncMailbox(row)">同步</el-button>
+            <el-button size="small" @click="openFolders(row)">文件夹</el-button>
+            <el-button size="small" type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="removeMailbox(row)">删除</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -217,5 +219,15 @@ onMounted(load);
 .header-actions {
   display: flex;
   gap: 8px;
+}
+.row-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+.row-actions .el-button {
+  flex: none;
+  margin-left: 0;
+  padding: 5px 9px;
 }
 </style>
