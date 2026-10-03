@@ -78,7 +78,6 @@
           <div class="row-actions">
             <el-button size="small" @click="testMailbox(row)">测试</el-button>
             <el-button size="small" :loading="row._syncing" @click="syncMailbox(row)">同步</el-button>
-            <el-button size="small" @click="openFolders(row)">文件夹</el-button>
             <el-button size="small" type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button size="small" type="danger" @click="removeMailbox(row)">删除</el-button>
           </div>
@@ -87,7 +86,6 @@
     </el-table>
 
     <mailbox-form-dialog ref="formRef" @saved="load" />
-    <folders-dialog ref="foldersRef" @saved="load" />
   </div>
 </template>
 
@@ -99,14 +97,12 @@ import { Plus, Link } from '@element-plus/icons-vue';
 import api, { errMsg } from '../api.js';
 import { formatDateTime } from '../utils.js';
 import MailboxFormDialog from '../components/MailboxFormDialog.vue';
-import FoldersDialog from '../components/FoldersDialog.vue';
 
 const route = useRoute();
 const mailboxes = ref([]);
 const oauth = reactive({ gmail: false, outlook: false });
 const loading = ref(false);
 const formRef = ref();
-const foldersRef = ref();
 
 function providerLabel(p) {
   if (p === 'gmail') return 'Gmail';
@@ -134,10 +130,6 @@ function openCreate() {
 
 function openEdit(row) {
   formRef.value.open(row);
-}
-
-function openFolders(row) {
-  foldersRef.value.open(row);
 }
 
 async function oauthStart(provider) {

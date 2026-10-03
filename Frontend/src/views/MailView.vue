@@ -49,7 +49,7 @@
             <span class="folder-name">{{ folderDisplayName(f) }}</span>
             <el-badge v-if="f.unread" :value="f.unread" :max="99" />
           </div>
-          <div v-if="!folders.length" class="empty-tip">暂无显示中的文件夹，可在邮箱管理 → 文件夹 中开启同步</div>
+          <div v-if="!folders.length" class="empty-tip">暂无显示中的文件夹，可在邮箱管理 → 编辑 → 文件夹同步 中开启同步</div>
         </template>
       </el-scrollbar>
 

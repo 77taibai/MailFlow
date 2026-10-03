@@ -5,6 +5,7 @@
     width="640px"
     :close-on-click-modal="false"
   >
+    <div class="dialog-scroll">
     <el-alert
       v-if="isOauth"
       type="info"
@@ -67,7 +68,27 @@
       <el-form-item label="推送排除关键词">
         <el-input v-model="form.dingtalkExclude" placeholder="逗号分隔" />
       </el-form-item>
+
+      <template v-if="editing">
+        <el-divider content-position="left">文件夹同步</el-divider>
+        <p class="hint">开启同步的文件夹会定时拉取新邮件（首次开启回填最新若干封）。</p>
+        <el-table :data="folders" v-loading="foldersLoading" max-height="240">
+          <el-table-column prop="path" label="路径" min-width="200" />
+          <el-table-column label="特殊用途" width="120">
+            <template #default="{ row }">{{ row.specialUse || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="邮件数" width="80">
+            <template #default="{ row }">{{ row.total }}</template>
+          </el-table-column>
+          <el-table-column label="同步" width="80">
+            <template #default="{ row }">
+              <el-switch :model-value="row.syncEnabled" @change="(v) => toggleFolder(row, v)" />
+            </template>
+          </el-table-column>
+        </el-table>
+      </template>
     </el-form>
+    </div>
 
     <template #footer>
       <el-button v-if="!isOauth" @click="test" :loading="testing">测试连接</el-button>
@@ -88,6 +109,8 @@ const visible = ref(false);
 const editing = ref(null);
 const saving = ref(false);
 const testing = ref(false);
+const folders = ref([]);
+const foldersLoading = ref(false);
 
 const isOauth = computed(() => editing.value?.authType === 'oauth2');
 const dialogTitle = computed(() => {
@@ -131,6 +154,34 @@ function open(row) {
     dingtalkExclude: row?.dingtalkExclude || '',
   });
   visible.value = true;
+  loadFolders(row?.id);
+}
+
+async function loadFolders(id) {
+  folders.value = [];
+  if (!id) return;
+  foldersLoading.value = true;
+  try {
+    const data = await api.get(`/mailboxes/${id}/folders`);
+    if (editing.value?.id === id) folders.value = data.items;
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  } finally {
+    if (editing.value?.id === id) foldersLoading.value = false;
+  }
+}
+
+async function toggleFolder(row, enabled) {
+  try {
+    await api.put(`/mailboxes/${editing.value.id}/folders`, {
+      folderId: row.id,
+      syncEnabled: enabled,
+    });
+    row.syncEnabled = enabled;
+    ElMessage.success(enabled ? '已开启同步' : '已关闭同步');
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  }
 }
 
 function validate() {
@@ -206,6 +257,10 @@ defineExpose({ open });
 </script>
 
 <style scoped>
+.dialog-scroll {
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+}
 .host-row {
   display: flex;
   gap: 10px;
@@ -219,5 +274,10 @@ defineExpose({ open });
   font-size: 12px;
   color: #909399;
   margin-left: 8px;
+}
+.hint {
+  font-size: 13px;
+  color: #909399;
+  margin: 0 0 10px;
 }
 </style>

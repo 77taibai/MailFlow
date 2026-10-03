@@ -44,7 +44,7 @@ MailFlow/
 ├── Frontend/
 │   ├── src/
 │   │   ├── views/            # Login / OidcCallback / Mail / Mailboxes
-│   │   ├── components/       # ComposeDialog / RichTextEditor / MailboxFormDialog / FoldersDialog / MailList / MailReader
+│   │   ├── components/       # ComposeDialog / RichTextEditor / MailboxFormDialog / MailList / MailReader
 │   │   ├── stores/auth.js    # 登录态（Pinia）
 │   │   ├── router/index.js   # 路由表与 token 守卫
 │   │   ├── api.js            # axios 封装（Bearer 注入、401 处理、blob 下载）
