@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { config } from '../config.js';
+import { signShareToken } from '../crypto.js';
 
 const PUSH_INTERVAL_MS = 3100;
 
@@ -23,13 +24,22 @@ function signedUrl(webhook, secret) {
   return `${webhook}${sep}timestamp=${ts}&sign=${sign}`;
 }
 
-export async function sendMarkdown(title, text) {
+export async function sendActionCard(card) {
   const { webhook, secret } = getDingtalkConfig();
   if (!webhook) throw new Error('钉钉 webhook 未配置');
   const resp = await fetch(signedUrl(webhook, secret), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ msgtype: 'markdown', markdown: { title, text } }),
+    body: JSON.stringify({
+      msgtype: 'actionCard',
+      actionCard: {
+        title: card.title,
+        text: card.text,
+        btnOrientation: '0',
+        singleTitle: card.singleTitle || '阅读邮件',
+        singleURL: card.singleURL,
+      },
+    }),
   });
   const data = await resp.json().catch(() => ({}));
   if (data.errcode !== 0) {
@@ -52,7 +62,7 @@ async function drain() {
     while (queue.length) {
       const task = queue.shift();
       try {
-        await sendMarkdown(task.title, task.text);
+        await sendActionCard(task);
       } catch (err) {
         console.error('[dingtalk] 推送失败:', err.message);
       }
@@ -63,8 +73,8 @@ async function drain() {
   }
 }
 
-export function enqueueMarkdown(title, text) {
-  queue.push({ title, text });
+export function enqueueActionCard(card) {
+  queue.push(card);
   drain();
 }
 
@@ -97,18 +107,22 @@ export function mailMatchesPushRules(mailbox, mail) {
 export function decidePushForMail(mailbox, mail) {
   if (!mailMatchesPushRules(mailbox, mail)) return false;
   db.prepare('UPDATE mails SET dingtalk_pushed = 1 WHERE id = ?').run(mail.id);
-  const from = mail.from_addr ? `${mail.from_name || ''} <${mail.from_addr}>` : mail.from_name || '未知';
-  const time = mail.date ? new Date(mail.date).toLocaleString('zh-CN') : '';
-  const text = [
-    `### 新邮件`,
-    ``,
-    `- **邮箱**: ${mailbox.name}`,
-    `- **发件人**: ${from}`,
-    `- **主题**: ${mail.subject || '(无主题)'}`,
-    `- **时间**: ${time}`,
-    ``,
-    mail.snippet ? `> ${mail.snippet}` : '',
-  ].join('\n');
-  enqueueMarkdown(`新邮件: ${mail.subject || '(无主题)'}`, text);
+
+  const subject = mail.subject || '(无主题)';
+  const from = mail.from_name || mail.from_addr || '未知';
+  const recipient = mailbox.name || mailbox.email || '';
+
+  const ttlSeconds = config.shareTtlHours > 0 ? Math.floor(config.shareTtlHours * 3600) : 0;
+  const token = signShareToken(mail.id, ttlSeconds);
+  const link = `${config.appUrl}/share/${token}`;
+
+  const text = [`### ${subject}`, `发件人：**${from}**`, '', `收件人：**${recipient}**`].join('\n');
+
+  enqueueActionCard({
+    title: subject,
+    text,
+    singleTitle: '阅读邮件',
+    singleURL: link,
+  });
   return true;
 }

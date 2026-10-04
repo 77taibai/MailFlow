@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import fs from 'node:fs';
-import { db } from '../db.js';
+import { db, getMailbox } from '../db.js';
 import { verifyShareToken } from '../crypto.js';
+import { openConnection } from '../services/imap.js';
 
 export const shareRouter = Router();
 
@@ -21,9 +22,40 @@ function resolveSharedMail(req, res) {
   return mail;
 }
 
-shareRouter.get('/:token', (req, res) => {
+async function markMailRead(mail) {
+  if (mail.seen) return;
+  db.prepare('UPDATE mails SET seen = 1 WHERE id = ?').run(mail.id);
+  mail.seen = 1;
+
+  const mailbox = getMailbox(mail.mailbox_id);
+  const folder = mail.folder_id
+    ? db.prepare('SELECT * FROM folders WHERE id = ?').get(mail.folder_id)
+    : null;
+  if (!mailbox || !folder || !mail.uid) return;
+
+  let client;
+  try {
+    client = await openConnection(mailbox);
+    await client.mailboxOpen(folder.path);
+    await client.messageFlagsAdd(mail.uid, ['\\Seen'], { uid: true });
+  } catch {
+    /* 分享页保持可用，IMAP 标记失败不影响读取 */
+  } finally {
+    if (client) {
+      try {
+        if (client.usable) await client.logout();
+        else client.close();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+shareRouter.get('/:token', async (req, res) => {
   const mail = resolveSharedMail(req, res);
   if (!mail) return;
+  await markMailRead(mail);
   const attachments = db
     .prepare('SELECT id, filename, content_type, size FROM attachments WHERE mail_id = ?')
     .all(mail.id);

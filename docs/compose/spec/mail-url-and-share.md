@@ -1,7 +1,7 @@
 ---
 feature: mail-url-and-share
 status: delivered
-updated: 2026-10-03
+updated: 2026-10-04
 branch: main
 commits: a4acfe6 (工作区未提交，待人工验证)
 ---
@@ -10,7 +10,7 @@ commits: a4acfe6 (工作区未提交，待人工验证)
 
 ## Report
 
-**What was built** — 邮件浏览地址化：主路由改为 `/mail/:id?`（`/` 重定向到 `/mail`），点击列表邮件 `push` 到 `/mail/<id>`，关闭回 `/mail`，直达/刷新保持当前邮件；合并账户下打开邮件不改变侧栏选中。免登录分享：登录后 `POST /api/mails/:id/share` 用独立密钥签发 HS256 分享令牌（`typ:'share'`、`mid`、可选 `exp`），公开 `GET /api/share/:token` 与附件下载仅返回该封邮件的裁剪字段，页面只读、不标记已读、无任何设置入口。新增 `SHARE_SECRET`/`SHARE_TTL_HOURS` 配置，README 与 `.env.example` 写明密钥生成、推导公式与可复现的手工生成片段。会话与分享两侧密钥隔离且 `typ` 互斥、算法均钉死 HS256，互相不能冒用。
+**What was built** — 邮件浏览地址化：主路由改为 `/mail/:id?`（`/` 重定向到 `/mail`），点击列表邮件 `push` 到 `/mail/<id>`，关闭回 `/mail`，直达/刷新保持当前邮件；合并账户下打开邮件不改变侧栏选中。免登录分享：登录后 `POST /api/mails/:id/share` 用独立密钥签发 HS256 分享令牌（`typ:'share'`、`mid`、可选 `exp`），公开 `GET /api/share/:token` 与附件下载仅返回该封邮件的裁剪字段，页面只读、打开即把该邮件标记为已读、无任何设置入口。新增 `SHARE_SECRET`/`SHARE_TTL_HOURS` 配置，README 与 `.env.example` 写明密钥生成、推导公式与可复现的手工生成片段。会话与分享两侧密钥隔离且 `typ` 互斥、算法均钉死 HS256，互相不能冒用。
 
 **Verification** — 均在 `main` 工作区实测：
 - 后端 `node --check` 全部文件 — PASS；`npm run build`（Frontend，1750 modules）— PASS。
@@ -25,6 +25,7 @@ commits: a4acfe6 (工作区未提交，待人工验证)
 - 前后端同源的 SPA 回退只排除 `/api`，因此 `/mail/:id`、`/share/:token` 无需任何后端页面路由即可直接访问。
 - 分享与会话隔离用「独立 scrypt salt 派生不同密钥」+「两侧显式校验 `typ`」双重保险，并显式 `algorithms:['HS256']`；不能只依赖密钥不同，否则误配同一密钥时仍可能互通。
 - 本地验证要绑 `127.0.0.1`，为此新增可选的 `HOST` 绑定项（默认空=所有网卡，不改变生产行为）。
+- 打开分享页标记已读：钉钉 actionCard 的「阅读邮件」按钮指向的正是 `/share/:token`，因此把标记已读放在公开的 `GET /api/share/:token` 里，任何分享链接打开都会同步本地与 IMAP 已读状态。
 
 ## [S1] Problem
 
@@ -56,7 +57,7 @@ commits: a4acfe6 (工作区未提交，待人工验证)
 - 查看（公开，挂载在 `requireAuth` 之前）：
   - `GET /api/share/:token`：校验 token（必须 `typ === 'share'` 且 `mid` 为有效邮件 id），仅返回该邮件只读字段：`subject / fromName / fromAddr / toList / ccList / date / bodyText / bodyHtml / attachments[{id,filename,contentType,size}]`；**不返回** mailboxId/folderId/uid/messageId 等可用于横向定位的字段。
   - `GET /api/share/:token/attachments/:attachmentId`：校验 token 且附件属于 `mid`，流式下载该附件。
-  - 分享接口全部只读，不提供任何写操作；打开分享页不改变邮件已读状态。
+  - 分享接口不提供设置类写操作；`GET /api/share/:token` 打开时会把该邮件标记为已读（本地 DB + IMAP `\Seen`，IMAP 失败不影响读取）。
 - 前端：新增公开路由 `/share/:token` → `ShareView.vue`，只读渲染（复用 iframe 沙箱方式），无回复/删除/已读按钮、无侧栏、无设置入口；附件经分享下载接口下载。分享接口用独立 axios 实例（不注入 Bearer、不触发 401 跳登录），token 无效时展示「分享链接无效或已过期」。
 - 登录后阅读窗（`MailReader`）新增「分享」动作：调用生成接口，把绝对链接展示/复制到剪贴板。
 
