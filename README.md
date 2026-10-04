@@ -107,6 +107,18 @@ cd ..\Backend; npm start            # 监听 :3000，托管 ./static 并 SPA 回
 
 `npm start`（脚本未带 `--dev`）时，只要 `./static/index.html`（相对后端工作目录）存在，后端就会接管前端静态资源并做 SPA 回退（`assets/` 等资源目录下缺失的文件仍返回 404）；否则仅提供 API。产物目录可用 `FRONTEND_DIST` 指定（例如 `../Frontend/dist`）。`DATA_DIR` 下的 `mailflow.db` 与 `attachments/` 是唯一需要备份的数据。
 
+### 5. 一键构建（可选）
+
+```powershell
+# Windows PowerShell（根目录）
+.\build.ps1
+
+# Linux / macOS（首次先 chmod +x build.sh）
+./build.sh
+```
+
+脚本按顺序执行：检查 `node` / `npm` 是否存在且 Node.js >= 22.5.0（缺失或过低只提示，需自行到 <https://nodejs.org> 安装）→ 前端运行库缺失时自动 `npm install` → 构建前端到 `MailFlowBuild/static` → 复制后端文件到 `MailFlowBuild`（不含 `node_modules`、`data`、`.env`）→ 询问是否创建 `.env` → 删除临时的 `Frontend/dist` → 打印产物路径。非交互环境用 `-CreateEnv` / `-NoEnv`（Linux 为 `--create-env` / `--no-env`）跳过 `.env` 交互询问；提示执行策略受限时用 `powershell -ExecutionPolicy Bypass -File .\build.ps1`。产物运行方式：`cd MailFlowBuild; npm install; npm start`。
+
 ## 配置项
 
 | 变量 | 默认 | 说明 |

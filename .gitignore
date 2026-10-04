@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 data/
+MailFlowBuild/
 .worktrees/
 dist/
 *.log
