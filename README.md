@@ -128,9 +128,8 @@ cd ..\Backend; npm start            # 监听 :3000，自动托管 dist 并 SPA �
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | 空 | 齐备才启用 Gmail OAuth |
 | `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT` | 空 / 空 / `common` | Outlook OAuth；tenant 用 `consumers` 或租户 ID |
 | `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | 空 | 三者齐备才启用 OIDC 登录 |
-| `OIDC_REDIRECT_URI` | `{APP_URL}/api/auth/oidc/callback` | OIDC 回调地址 |
-| `OIDC_SCOPES` | `openid profile email` | OIDC 授权范围 |
-| `OIDC_ALLOWED_EMAIL` | 空（不限） | 非空时仅允许该邮箱登录 |
+| `OIDC_SCOPES` | `openid` | OIDC 授权范围 |
+| `OIDC_ALLOWED_SUB` | 空（不限） | 非空时仅允许该 `sub`（OIDC 用户标识）登录 |
 | `OIDC_INSECURE` | `0` | issuer 为 `http://` 时必须设 `1` |
 
 ## 邮箱接入

@@ -84,8 +84,7 @@ authRouter.get('/oidc/login', async (req, res, next) => {
   try {
     const clientConfig = await getOidcConfig();
     const state = signToken({ t: 'oidc', n: crypto.randomBytes(16).toString('hex') }, 600);
-    const redirectUri =
-      config.oidc.redirectUri || `${config.appUrl}/api/auth/oidc/callback`;
+    const redirectUri = `${config.appUrl}/api/auth/oidc/callback`;
     const redirectTo = oidc.buildAuthorizationUrl(clientConfig, {
       redirect_uri: redirectUri,
       scope: config.oidc.scopes,
@@ -117,11 +116,14 @@ authRouter.get('/oidc/callback', async (req, res) => {
       expectedState: state,
     });
     const claims = tokens.claims();
-    const email = claims.email || claims.preferred_username || claims.sub;
-    if (config.oidc.allowedEmail && email !== config.oidc.allowedEmail) {
+    const sub = claims.sub;
+    if (!sub) {
+      return res.redirect(`${frontend}/login?error=${encodeURIComponent('ID Token 缺少 sub claim')}`);
+    }
+    if (config.oidc.allowedSub && sub !== config.oidc.allowedSub) {
       return res.redirect(`${frontend}/login?error=${encodeURIComponent('该账号不被允许登录')}`);
     }
-    const token = signSession(email, 'oidc');
+    const token = signSession(sub, 'oidc');
     res.redirect(`${frontend}/oidc-callback#token=${encodeURIComponent(token)}`);
   } catch (err) {
     res.redirect(`${frontend}/login?error=${encodeURIComponent(err.message || 'oidc_failed')}`);

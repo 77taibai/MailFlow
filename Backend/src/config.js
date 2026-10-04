@@ -59,9 +59,8 @@ export const config = {
     issuer: env.OIDC_ISSUER || '',
     clientId: env.OIDC_CLIENT_ID || '',
     clientSecret: env.OIDC_CLIENT_SECRET || '',
-    redirectUri: env.OIDC_REDIRECT_URI || '',
-    scopes: env.OIDC_SCOPES || 'openid profile email',
-    allowedEmail: env.OIDC_ALLOWED_EMAIL || '',
+    scopes: env.OIDC_SCOPES || 'openid',
+    allowedSub: env.OIDC_ALLOWED_SUB || '',
     insecure: bool('OIDC_INSECURE', false),
   },
 };
