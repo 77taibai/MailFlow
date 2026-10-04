@@ -96,14 +96,16 @@ cd Frontend; npm run dev
 
 浏览器打开 <http://localhost:5173>，用你在 `.env` 里设的 `AUTH_PASSWORD` 登录。
 
+开发模式由 `npm run dev` 脚本里的 `--dev` 标记识别：后端**不托管**前端构建产物（即使已经构建过），只提供 API，前端由 Vite dev server 提供，`/api` 经代理转发到 `:3000`。
+
 ### 4. 生产模式（单端口）
 
 ```powershell
-cd Frontend; npm run build          # 产物到 Frontend/dist
-cd ..\Backend; npm start            # 监听 :3000，自动托管 dist 并 SPA 回退
+cd Frontend; npm run build          # 构建前端产物
+cd ..\Backend; npm start            # 监听 :3000，托管 ./static 并 SPA 回退
 ```
 
-只要 `Frontend/dist/index.html` 存在，后端就会接管前端静态资源；否则仅提供 API。`DATA_DIR` 下的 `mailflow.db` 与 `attachments/` 是唯一需要备份的数据。
+`npm start`（脚本未带 `--dev`）时，只要 `./static/index.html`（相对后端工作目录）存在，后端就会接管前端静态资源并做 SPA 回退（`assets/` 等资源目录下缺失的文件仍返回 404）；否则仅提供 API。产物目录可用 `FRONTEND_DIST` 指定（例如 `../Frontend/dist`）。`DATA_DIR` 下的 `mailflow.db` 与 `attachments/` 是唯一需要备份的数据。
 
 ## 配置项
 
@@ -112,6 +114,7 @@ cd ..\Backend; npm start            # 监听 :3000，自动托管 dist 并 SPA �
 | `PORT` | `3000` | 监听端口 |
 | `APP_URL` | `http://localhost:{PORT}` | 外部可访问基址，决定 OAuth/OIDC 的 `redirect_uri` |
 | `FRONTEND_ORIGIN` | 空（用 `APP_URL`） | 授权回调后跳回的前端地址（dev 为 `http://localhost:5173`） |
+| `FRONTEND_DIST` | `./static`（相对后端工作目录） | 前端构建产物目录 |
 | `APP_SECRET` | **必填** | JWT 签名 + 凭据加密密钥（scrypt 派生） |
 | `DATA_DIR` | `./data` | SQLite 与附件目录（相对进程工作目录） |
 | `AUTH_PASSWORD` | **必填** | 单用户登录密码（明文存 env，不落库） |

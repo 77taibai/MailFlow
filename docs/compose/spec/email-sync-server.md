@@ -46,7 +46,7 @@ commits: e41abc0..d8c3b01
 
 - 后端 Node.js >= 22.5（Ubuntu），ESM，Express 5，数据库用内置 `node:sqlite`（零原生编译），端口 `PORT`（默认 3000）。
 - IMAP 库 imapflow（支持 XOAUTH2），发送用 nodemailer（支持 XOAUTH2），解析用 mailparser，OIDC 用 openid-client v6，上传用 multer（内存存储）。
-- 前端 Vue 3 + Vite + Vue Router + Pinia + Element Plus（zh-cn），开发期 Vite 代理 `/api`；生产期后端静态托管 `Frontend/dist` 并 SPA 回退。
+- 前端 Vue 3 + Vite + Vue Router + Pinia + Element Plus（zh-cn），开发期 Vite 代理 `/api`；生产期后端静态托管 `FRONTEND_DIST`（默认 `./static`，相对后端工作目录）并 SPA 回退，开发模式由 `npm run dev` 脚本的 `--dev` 标记、固定不托管。
 - 运行时数据：`DATA_DIR`（默认 `Backend/data/`，git 忽略）下 `mailflow.db` 与 `attachments/<mailId>/`。
 
 ### 认证（单用户）

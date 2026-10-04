@@ -28,8 +28,14 @@ if (!authPassword) {
   throw new Error('缺少 AUTH_PASSWORD 环境变量，请在 .env 中设置（单用户密码登录）');
 }
 
+// 开发模式由启动脚本标记：`npm run dev`（Backend/package.json 中的 --dev）
+const devMode = process.argv.includes('--dev');
+
 export const config = {
   port,
+  devMode,
+  // 开发模式不托管前端构建产物，生产由 npm start 托管
+  frontendDist: path.resolve(env.FRONTEND_DIST || './static'),
   host: env.HOST || '',
   appUrl: (env.APP_URL || `http://localhost:${port}`).replace(/\/+$/, ''),
   frontendOrigin: (env.FRONTEND_ORIGIN || '').replace(/\/+$/, ''),
