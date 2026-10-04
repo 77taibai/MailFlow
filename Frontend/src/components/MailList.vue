@@ -1,5 +1,9 @@
 <template>
-  <el-scrollbar v-loading="loading" class="mail-list">
+  <el-scrollbar ref="scrollbarRef" v-loading="loading" class="mail-list" @scroll="onScroll">
+    <div v-if="loadingNewer" class="load-more">
+      <el-icon class="is-loading"><Loading /></el-icon>
+      <span>正在加载较新邮件…</span>
+    </div>
     <div
       v-for="m in mails"
       :key="m.id"
@@ -28,20 +32,73 @@
       </div>
     </div>
     <el-empty v-if="!loading && !mails.length" description="暂无邮件，点击上方“同步”拉取" />
+    <div v-if="loadingOlder" class="load-more">
+      <el-icon class="is-loading"><Loading /></el-icon>
+      <span>正在加载较早邮件…</span>
+    </div>
+    <div v-else-if="mails.length && !hasMoreOlder" class="load-end">没有更多邮件了</div>
   </el-scrollbar>
 </template>
 
 <script setup>
+import { ref } from 'vue';
 import { formatDate } from '../utils.js';
 
-defineProps({
+const props = defineProps({
   mails: { type: Array, default: () => [] },
   selectedIds: { type: Array, default: () => [] },
   activeMailId: { type: Number, default: null },
   loading: { type: Boolean, default: false },
+  loadingOlder: { type: Boolean, default: false },
+  loadingNewer: { type: Boolean, default: false },
+  hasMoreOlder: { type: Boolean, default: false },
+  hasMoreNewer: { type: Boolean, default: false },
 });
 
-defineEmits(['toggle', 'open']);
+const emit = defineEmits(['toggle', 'open', 'load-older', 'load-newer']);
+
+const scrollbarRef = ref(null);
+
+const NEAR_TOP = 32;
+const NEAR_BOTTOM = 96;
+
+function wrapEl() {
+  const w = scrollbarRef.value?.wrapRef;
+  if (!w) return null;
+  return w.value || w;
+}
+
+function onScroll({ scrollTop }) {
+  const wrap = wrapEl();
+  if (!wrap) return;
+  const max = wrap.scrollHeight - wrap.clientHeight;
+  if (scrollTop <= NEAR_TOP) {
+    if (props.hasMoreNewer && !props.loadingNewer && !props.loading) emit('load-newer');
+    return;
+  }
+  if (max - scrollTop <= NEAR_BOTTOM) {
+    if (props.hasMoreOlder && !props.loadingOlder && !props.loading) emit('load-older');
+  }
+}
+
+function getScrollInfo() {
+  const wrap = wrapEl();
+  return wrap ? { scrollTop: wrap.scrollTop, scrollHeight: wrap.scrollHeight } : null;
+}
+
+function restoreScroll(anchor) {
+  if (!anchor) return;
+  const wrap = wrapEl();
+  if (!wrap) return;
+  const delta = wrap.scrollHeight - anchor.scrollHeight;
+  if (delta !== 0) scrollbarRef.value?.setScrollTop(anchor.scrollTop + delta);
+}
+
+function scrollToTop() {
+  scrollbarRef.value?.setScrollTop(0);
+}
+
+defineExpose({ getScrollInfo, restoreScroll, scrollToTop });
 </script>
 
 <style scoped>
@@ -140,6 +197,16 @@ defineEmits(['toggle', 'open']);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.load-more,
+.load-end {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  font-size: 12px;
+  color: #909399;
 }
 @media (max-width: 767.98px) {
   .mail-row {

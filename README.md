@@ -9,7 +9,7 @@
 - **多邮箱同步**：IMAP 增量同步，按 UID 追踪游标，感知 `UIDVALIDITY` 变化自动重建；首次同步回填每文件夹最新 N 封（默认 50）。
 - **任意 IMAP/SMTP 邮箱**：表单手填服务器与授权码，保存前可测试 IMAP 登录 + SMTP 连通。
 - **Gmail / Outlook 一键授权**：OAuth2 全链路（IMAP + SMTP 双通道），服务器地址、账号、凭据自动生成，无需手填；access token 到期前自动用 refresh token 刷新。
-- **邮件收发**：分页浏览、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill，正文编辑器支持全屏编辑）、标签式收件人/抄送输入（空格/逗号/分号分隔，粘贴可批量拆分、标签可就地编辑）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。接收侧规范解析并展示 `Sender` / `Reply-To` / `References` 等标准头，发送侧自动生成 `Date` / `Message-ID` 并支持 `Reply-To` / `In-Reply-To` / `References`，回复时自动写线程链；发件 `From` 支持按邮箱配置**发件人显示名**（`mailboxes.sender_name`，留空则收件人只看到邮箱地址）；对缺失/畸形/非标头做防御式降级，保证邮件仍可入库。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
+- **邮件收发**：滚动自动加载（向下续载更早、向上续载更新）、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill，正文编辑器支持全屏编辑）、标签式收件人/抄送输入（空格/逗号/分号分隔，粘贴可批量拆分、标签可就地编辑）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。接收侧规范解析并展示 `Sender` / `Reply-To` / `References` 等标准头，发送侧自动生成 `Date` / `Message-ID` 并支持 `Reply-To` / `In-Reply-To` / `References`，回复时自动写线程链；发件 `From` 支持按邮箱配置**发件人显示名**（`mailboxes.sender_name`，留空则收件人只看到邮箱地址）；对缺失/畸形/非标头做防御式降级，保证邮件仍可入库。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
 - **登录**：用户名密码（默认 `admin`）与自有 OIDC 单点登录二选一，JWT 会话（默认 7 天），登录接口内存限速 10 次/分钟/IP。
 - **邮件地址化浏览**：打开某封邮件时地址栏变为 `/mail/<id>`，可复制该地址直达或刷新后仍停在该邮件；合并账户下点击邮件不会把左侧邮箱切换成该邮件所属邮箱。
 - **免登录分享**：登录后可为某封邮件生成带签名密钥的分享链接（`/share/<token>`）。收件人无需登录即可查看该封邮件正文与该邮件附件，看不到其它邮件、也不能改动任何设置；分享令牌与登录令牌密钥隔离、类型互斥，不能互相冒用。密钥生成与令牌格式见下文「免登录分享」。
@@ -182,7 +182,7 @@ OAuth 邮箱的编辑界面只开放名称、发件人名称、同步间隔、�
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/mails` | 分页列表，query：`mailboxId`(默认必填)、`folderId?`、`seen?`、`page?`、`pageSize?`(默认 20，上限 100)。改用 `scope=merged-inbox` 时无需 `mailboxId`，聚合所有邮箱收件箱 |
+| GET | `/api/mails` | 列表，query：`mailboxId`(默认必填)、`folderId?`、`seen?`、`page?`、`pageSize?`(默认 20，上限 100)。改用 `scope=merged-inbox` 时无需 `mailboxId`，聚合所有邮箱收件箱。滚动加载时可传游标 `before=<date>:<id>`（取更早）或 `after=<date>:<id>`（取更新），二者优先于 `page`，按 `date DESC, id DESC` 稳定排序 |
 | GET | `/api/mails/:id` | 详情（含正文、附件元数据，以及 `messageId`/`inReplyTo`/`references[]`/`from`/`sender`/`replyTo`/`to`/`cc`/`date` 等头字段） |
 | GET | `/api/mails/:id/attachments/:attachmentId` | 附件流式下载 |
 | POST | `/api/mails/:id/share` | 生成该邮件的免登录分享链接，返回 `{ token, path, expiresAt }` |
@@ -242,7 +242,7 @@ node --input-type=module -e "import { signShareToken } from './src/crypto.js'; c
 
 ## 前端
 
-- 路由：`/login`、`/oidc-callback`、`/share/:token`（免鉴权）；`/` 重定向到 `/mail`，`/mail/:id?`（三栏邮件台，带 id 时打开该邮件；翻页/文件夹/邮箱上下文留在组件内存，刷新回到合并账户 + 该邮件）、`/compose`（独立撰写页，`?mailbox=<id>` 预选发件邮箱、`?reply=<id>` 预填回复）、`/mailboxes`（邮箱管理）。守卫直接从 `localStorage.mailflow_token` 判断，401 统一清会话跳登录页；`/share` 页面用不带鉴权的独立 axios 实例，出错只提示不跳登录。
+- 路由：`/login`、`/oidc-callback`、`/share/:token`（免鉴权）；`/` 重定向到 `/mail`，`/mail/:id?`（三栏邮件台，带 id 时打开该邮件；已加载列表与滚动位置留在组件内存，刷新回到合并账户 + 该邮件）、`/compose`（独立撰写页，`?mailbox=<id>` 预选发件邮箱、`?reply=<id>` 预填回复）、`/mailboxes`（邮箱管理）。守卫直接从 `localStorage.mailflow_token` 判断，401 统一清会话跳登录页；`/share` 页面用不带鉴权的独立 axios 实例，出错只提示不跳登录。
 - 邮件正文用 `sandbox="allow-popups"` 的 iframe + `srcdoc` 渲染，**不含** `allow-scripts` / `allow-same-origin`，脚本不执行、无法读取父页存储；未使用 `v-html`，也未引入第三方净化库。
 - Token 存 `localStorage`（非 sessionStorage），跨标签页共享。
 

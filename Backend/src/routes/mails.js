@@ -34,63 +34,90 @@ function parseReferences(value) {
   return String(value).split(/\s+/).filter(Boolean);
 }
 
+function parseCursor(value) {
+  if (!value) return null;
+  const [dateStr, idStr] = String(value).split(':');
+  const date = Number(dateStr);
+  const id = Number(idStr);
+  if (!Number.isFinite(date) || !Number.isFinite(id)) return null;
+  return { date, id };
+}
+
 mailsRouter.get('/', (req, res) => {
   const { mailboxId, folderId, seen, scope } = req.query;
 
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
 
-  if (scope === 'merged-inbox') {
-    const where = ["(f.special_use = '\\Inbox' OR f.path = 'INBOX')"];
-    const params = [];
-    if (seen === '0' || seen === '1') {
-      where.push('m.seen = ?');
-      params.push(Number(seen));
+  const before = parseCursor(req.query.before);
+  const after = parseCursor(req.query.after);
+  const cursor = before ? { ...before, dir: 'before' } : after ? { ...after, dir: 'after' } : null;
+
+  const isMerged = scope === 'merged-inbox';
+  const where = [];
+  const params = [];
+
+  if (isMerged) {
+    where.push("(f.special_use = '\\Inbox' OR f.path = 'INBOX')");
+  } else {
+    if (!mailboxId) return res.status(400).json({ error: '缺少 mailboxId' });
+    where.push('m.mailbox_id = ?');
+    params.push(Number(mailboxId));
+    if (folderId) {
+      where.push('m.folder_id = ?');
+      params.push(Number(folderId));
     }
-    const totalRow = db
-      .prepare(
-        `SELECT COUNT(*) AS n FROM mails m JOIN folders f ON f.id = m.folder_id
-         WHERE ${where.join(' AND ')}`
-      )
-      .get(...params);
-    const items = db
-      .prepare(
-        `SELECT m.id, m.uid, m.subject, m.from_name, m.from_addr, m.date, m.snippet, m.seen,
-                m.has_attachments, m.size, m.folder_id, m.mailbox_id, mb.name AS mailbox_name
-         FROM mails m
-         JOIN folders f ON f.id = m.folder_id
-         JOIN mailboxes mb ON mb.id = m.mailbox_id
-         WHERE ${where.join(' AND ')}
-         ORDER BY m.date DESC, m.id DESC LIMIT ? OFFSET ?`
-      )
-      .all(...params, pageSize, (page - 1) * pageSize);
-    return res.json({ total: totalRow.n, page, pageSize, items });
-  }
-
-  if (!mailboxId) return res.status(400).json({ error: '缺少 mailboxId' });
-
-  const where = ['m.mailbox_id = ?'];
-  const params = [Number(mailboxId)];
-  if (folderId) {
-    where.push('m.folder_id = ?');
-    params.push(Number(folderId));
   }
   if (seen === '0' || seen === '1') {
     where.push('m.seen = ?');
     params.push(Number(seen));
   }
 
+  const countJoin = isMerged ? 'JOIN folders f ON f.id = m.folder_id' : '';
+  const listJoin = isMerged
+    ? `JOIN folders f ON f.id = m.folder_id
+       JOIN mailboxes mb ON mb.id = m.mailbox_id`
+    : '';
+  const columns = isMerged
+    ? `m.id, m.uid, m.subject, m.from_name, m.from_addr, m.date, m.snippet, m.seen,
+       m.has_attachments, m.size, m.folder_id, m.mailbox_id, mb.name AS mailbox_name`
+    : `m.id, m.uid, m.subject, m.from_name, m.from_addr, m.date, m.snippet, m.seen,
+       m.has_attachments, m.size, m.folder_id`;
+
   const totalRow = db
-    .prepare(`SELECT COUNT(*) AS n FROM mails m WHERE ${where.join(' AND ')}`)
+    .prepare(`SELECT COUNT(*) AS n FROM mails m ${countJoin} WHERE ${where.join(' AND ')}`)
     .get(...params);
+
+  const itemWhere = [...where];
+  const itemParams = [...params];
+  let orderDir = 'DESC';
+  let limitClause = 'LIMIT ? OFFSET ?';
+
+  if (cursor) {
+    if (cursor.dir === 'before') {
+      itemWhere.push('(COALESCE(m.date, 0) < ? OR (COALESCE(m.date, 0) = ? AND m.id < ?))');
+      itemParams.push(cursor.date, cursor.date, cursor.id);
+    } else {
+      itemWhere.push('(COALESCE(m.date, 0) > ? OR (COALESCE(m.date, 0) = ? AND m.id > ?))');
+      itemParams.push(cursor.date, cursor.date, cursor.id);
+      orderDir = 'ASC';
+    }
+    limitClause = 'LIMIT ?';
+    itemParams.push(pageSize);
+  } else {
+    itemParams.push(pageSize, (page - 1) * pageSize);
+  }
+
   const items = db
     .prepare(
-      `SELECT m.id, m.uid, m.subject, m.from_name, m.from_addr, m.date, m.snippet, m.seen,
-              m.has_attachments, m.size, m.folder_id
-       FROM mails m WHERE ${where.join(' AND ')}
-       ORDER BY m.date DESC, m.id DESC LIMIT ? OFFSET ?`
+      `SELECT ${columns}
+       FROM mails m ${listJoin}
+       WHERE ${itemWhere.join(' AND ')}
+       ORDER BY COALESCE(m.date, 0) ${orderDir}, m.id ${orderDir} ${limitClause}`
     )
-    .all(...params, pageSize, (page - 1) * pageSize);
+    .all(...itemParams);
+
+  if (cursor && cursor.dir === 'after') items.reverse();
 
   res.json({ total: totalRow.n, page, pageSize, items });
 });

@@ -32,26 +32,25 @@
         <el-button size="small" :disabled="!selectedIds.length || mergedSelected" @click="moveDialogVisible = true">移动</el-button>
         <el-button size="small" type="danger" :disabled="!selectedIds.length" @click="batchDelete">删除</el-button>
         <div class="spacer"></div>
-        <el-pagination
-          v-model:current-page="page"
-          :page-size="pageSize"
-          :total="total"
-          layout="prev, pager, next"
-          small
-          @current-change="loadMails"
-        />
         <el-button class="compose-btn" type="primary" :icon="EditPen" size="small" :disabled="!mailboxes.length" @click="openCompose">
           撰写
         </el-button>
       </div>
 
       <mail-list
+        ref="listRef"
         :mails="mails"
         :selected-ids="selectedIds"
         :active-mail-id="currentMail && currentMail.id"
         :loading="listLoading"
+        :loading-older="loadingOlder"
+        :loading-newer="loadingNewer"
+        :has-more-older="hasMoreOlder"
+        :has-more-newer="hasMoreNewer"
         @toggle="toggleSelect"
         @open="openMail"
+        @load-older="loadOlder"
+        @load-newer="loadNewer"
       />
     </el-main>
 
@@ -59,7 +58,7 @@
       <div class="mobile-bar reader-back" v-if="isMobile && currentMail">
         <el-button :icon="ArrowLeft" text @click="closeMail" />
       </div>
-      <mail-reader :mail="currentMail" @refresh="loadMails" @reply="prefillReply" @deleted="onMailDeleted" />
+      <mail-reader :mail="currentMail" @refresh="resetMails" @reply="prefillReply" @deleted="onMailDeleted" />
     </el-main>
 
     <el-drawer
@@ -101,7 +100,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Refresh, EditPen, Menu, ArrowLeft } from '@element-plus/icons-vue';
@@ -125,8 +124,12 @@ const folders = ref([]);
 const selectedFolderId = ref(null);
 const mails = ref([]);
 const total = ref(0);
-const page = ref(1);
 const pageSize = 20;
+const hasMoreOlder = ref(false);
+const hasMoreNewer = ref(false);
+const loadingOlder = ref(false);
+const loadingNewer = ref(false);
+const listRef = ref(null);
 const selectedIds = ref([]);
 const currentMail = ref(null);
 const listLoading = ref(false);
@@ -177,8 +180,7 @@ function selectMerged() {
   folders.value = [];
   currentMail.value = null;
   selectedIds.value = [];
-  page.value = 1;
-  loadMails();
+  resetMails();
 }
 
 function selectMailbox(id) {
@@ -205,6 +207,8 @@ async function loadFolders() {
       selectedFolderId.value = null;
       mails.value = [];
       total.value = 0;
+      hasMoreOlder.value = false;
+      hasMoreNewer.value = false;
       currentMail.value = null;
       selectedIds.value = [];
     }
@@ -214,34 +218,48 @@ async function loadFolders() {
 function selectFolder(id) {
   clearRouteMail();
   selectedFolderId.value = id;
-  page.value = 1;
   currentMail.value = null;
   selectedIds.value = [];
-  loadMails();
+  resetMails();
 }
 
-async function loadMails() {
+function listQuery() {
+  return mergedSelected.value
+    ? { scope: 'merged-inbox' }
+    : { mailboxId: selectedMailboxId.value, folderId: selectedFolderId.value };
+}
+
+function cursorOf(mail) {
+  return `${Number(mail.date) || 0}:${mail.id}`;
+}
+
+async function resetMails() {
   listLoading.value = true;
+  hasMoreOlder.value = false;
+  hasMoreNewer.value = false;
   try {
     if (mergedSelected.value) {
       const data = await api.get('/mails', {
-        params: { scope: 'merged-inbox', page: page.value, pageSize },
+        params: { ...listQuery(), page: 1, pageSize },
       });
       mails.value = data.items;
       total.value = data.total;
+      hasMoreOlder.value = data.total > data.items.length;
+      if (listRef.value) listRef.value.scrollToTop();
       return;
     }
-    if (!selectedMailboxId.value || !selectedFolderId.value) return;
+    if (!selectedMailboxId.value || !selectedFolderId.value) {
+      mails.value = [];
+      total.value = 0;
+      return;
+    }
     const data = await api.get('/mails', {
-      params: {
-        mailboxId: selectedMailboxId.value,
-        folderId: selectedFolderId.value,
-        page: page.value,
-        pageSize,
-      },
+      params: { ...listQuery(), page: 1, pageSize },
     });
     mails.value = data.items;
     total.value = data.total;
+    hasMoreOlder.value = data.total > data.items.length;
+    if (listRef.value) listRef.value.scrollToTop();
   } catch (e) {
     ElMessage.error(errMsg(e));
   } finally {
@@ -249,10 +267,58 @@ async function loadMails() {
   }
 }
 
+async function loadOlder() {
+  if (listLoading.value || loadingOlder.value || !hasMoreOlder.value) return;
+  const oldest = mails.value[mails.value.length - 1];
+  if (!oldest) return;
+  loadingOlder.value = true;
+  try {
+    const data = await api.get('/mails', {
+      params: { ...listQuery(), before: cursorOf(oldest), pageSize },
+    });
+    const known = new Set(mails.value.map((m) => m.id));
+    const fresh = data.items.filter((m) => !known.has(m.id));
+    mails.value = mails.value.concat(fresh);
+    hasMoreOlder.value = data.items.length === pageSize;
+    if (data.total > total.value) hasMoreNewer.value = true;
+    total.value = data.total;
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  } finally {
+    loadingOlder.value = false;
+  }
+}
+
+async function loadNewer() {
+  if (listLoading.value || loadingNewer.value || !hasMoreNewer.value) return;
+  const newest = mails.value[0];
+  if (!newest) return;
+  loadingNewer.value = true;
+  const anchor = listRef.value ? listRef.value.getScrollInfo() : null;
+  try {
+    const data = await api.get('/mails', {
+      params: { ...listQuery(), after: cursorOf(newest), pageSize },
+    });
+    const known = new Set(mails.value.map((m) => m.id));
+    const fresh = data.items.filter((m) => !known.has(m.id));
+    if (fresh.length) {
+      mails.value = fresh.concat(mails.value);
+      await nextTick();
+      if (anchor && listRef.value) listRef.value.restoreScroll(anchor);
+    }
+    hasMoreNewer.value = data.items.length === pageSize;
+    total.value = data.total;
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  } finally {
+    loadingNewer.value = false;
+  }
+}
+
 async function refreshAll() {
   await loadMailboxes();
   if (!mergedSelected.value) await loadFolders();
-  await loadMails();
+  await resetMails();
 }
 
 async function syncNow() {
@@ -352,7 +418,7 @@ async function batchSeen(seen) {
     await api.post('/mails/batch', { ids: [...selectedIds.value], action: seen ? 'seen' : 'unseen' });
     ElMessage.success('已更新');
     selectedIds.value = [];
-    await loadMails();
+    await resetMails();
     loadFolders();
     loadMailboxes();
   } catch (e) {
