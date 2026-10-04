@@ -6,6 +6,13 @@ import { db, getMailbox, touchMailboxStatus } from '../db.js';
 import { config } from '../config.js';
 import { getCredentials } from './mailboxAuth.js';
 import { decidePushForMail } from './dingtalk.js';
+import {
+  firstAddress,
+  normalizeMessageId,
+  extractMailHeaders,
+  safeDate,
+  safeSubject,
+} from './mailHeaders.js';
 
 function connectOptions(mailbox, creds) {
   return {
@@ -146,11 +153,13 @@ function findSentTwin(mailboxId, folderId, parsed) {
   const rows = db
     .prepare('SELECT * FROM mails WHERE mailbox_id = ? AND folder_id = ?')
     .all(mailboxId, folderId);
-  const addr = parsed.from?.value?.[0]?.address || null;
-  const date = parsed.date ? parsed.date.getTime() : Date.now();
+  const addr = firstAddress(parsed.from).address;
+  const date = safeDate(parsed.date) || Date.now();
+  const subject = safeSubject(parsed.subject);
+  const messageId = normalizeMessageId(parsed.messageId);
   return rows.find((row) => {
-    if (row.message_id && parsed.messageId && row.message_id === parsed.messageId) return true;
-    if ((row.subject || '') !== (parsed.subject || '')) return false;
+    if (row.message_id && messageId && row.message_id === messageId) return true;
+    if ((row.subject || '') !== subject) return false;
     if ((row.from_addr || null) !== addr) return false;
     return Math.abs((row.date || 0) - date) < SENT_TWIN_WINDOW_MS;
   });
@@ -159,6 +168,7 @@ function findSentTwin(mailboxId, folderId, parsed) {
 function insertMail(mailbox, folderRow, msg, parsed) {
   const now = Date.now();
   const flags = Array.from(msg.flags || []);
+  const h = extractMailHeaders(parsed);
 
   if (folderRow.special_use === '\\Sent') {
     const twin = findSentTwin(mailbox.id, folderRow.id, parsed);
@@ -170,12 +180,12 @@ function insertMail(mailbox, folderRow, msg, parsed) {
     }
   }
 
-  if (parsed.messageId) {
+  if (h.messageId) {
     const localCopy = db
       .prepare(
         'SELECT id FROM mails WHERE mailbox_id = ? AND message_id = ? AND uid IS NULL'
       )
-      .get(mailbox.id, parsed.messageId);
+      .get(mailbox.id, h.messageId);
     if (localCopy) {
       db.prepare(
         `UPDATE mails SET folder_id = ?, uid = ?, flags = ?, seen = ?, size = ?, dingtalk_pushed = 1, date = COALESCE(?, date)
@@ -186,36 +196,41 @@ function insertMail(mailbox, folderRow, msg, parsed) {
         JSON.stringify(flags),
         flags.includes('\\Seen') ? 1 : 0,
         msg.size || 0,
-        parsed.date ? parsed.date.getTime() : null,
+        h.date,
         localCopy.id
       );
       return { id: localCopy.id, isNew: false };
     }
   }
 
-  const text = parsed.text || '';
   const seen = flags.includes('\\Seen') ? 1 : 0;
   const info = db
     .prepare(
-      `INSERT INTO mails(mailbox_id, folder_id, uid, message_id, in_reply_to, subject, from_name, from_addr,
-        to_list, cc_list, date, snippet, body_text, body_html, flags, seen, size, has_attachments, created_at)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO mails(mailbox_id, folder_id, uid, message_id, in_reply_to, reference_ids, subject, from_name, from_addr,
+        sender_name, sender_addr, reply_to_name, reply_to_addr, to_list, cc_list, date, snippet, body_text, body_html,
+        flags, seen, size, has_attachments, created_at)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       mailbox.id,
       folderRow.id,
       msg.uid,
-      parsed.messageId || null,
-      parsed.inReplyTo || null,
-      parsed.subject || '',
-      parsed.from?.value?.[0]?.name || null,
-      parsed.from?.value?.[0]?.address || null,
-      parsed.to?.text || null,
-      parsed.cc?.text || null,
-      parsed.date ? parsed.date.getTime() : now,
-      text.replace(/\s+/g, ' ').trim().slice(0, 200),
-      text,
-      parsed.html || null,
+      h.messageId,
+      h.inReplyTo,
+      h.references.length ? JSON.stringify(h.references) : null,
+      h.subject,
+      h.fromName,
+      h.fromAddr,
+      h.senderName,
+      h.senderAddr,
+      h.replyToName,
+      h.replyToAddr,
+      h.toList,
+      h.ccList,
+      h.date || now,
+      h.text.replace(/\s+/g, ' ').trim().slice(0, 200),
+      h.text,
+      h.html,
       JSON.stringify(flags),
       seen,
       msg.size || 0,
@@ -297,12 +312,13 @@ export async function syncMailbox(mailboxId) {
             parsed = { subject: '(解析失败)', text: '' };
           }
 
-          if (parsed.messageId) {
+          const messageId = normalizeMessageId(parsed.messageId);
+          if (messageId) {
             const sameMsg = db
               .prepare(
                 'SELECT id FROM mails WHERE mailbox_id = ? AND folder_id = ? AND message_id = ?'
               )
-              .get(mailbox.id, folder.id, parsed.messageId);
+              .get(mailbox.id, folder.id, messageId);
             if (sameMsg) continue;
           }
 

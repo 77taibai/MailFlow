@@ -9,7 +9,7 @@
 - **多邮箱同步**：IMAP 增量同步，按 UID 追踪游标，感知 `UIDVALIDITY` 变化自动重建；首次同步回填每文件夹最新 N 封（默认 50）。
 - **任意 IMAP/SMTP 邮箱**：表单手填服务器与授权码，保存前可测试 IMAP 登录 + SMTP 连通。
 - **Gmail / Outlook 一键授权**：OAuth2 全链路（IMAP + SMTP 双通道），服务器地址、账号、凭据自动生成，无需手填；access token 到期前自动用 refresh token 刷新。
-- **邮件收发**：分页浏览、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill，正文编辑器支持全屏编辑）、标签式收件人/抄送输入（空格/逗号/分号分隔，粘贴可批量拆分、标签可就地编辑）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
+- **邮件收发**：分页浏览、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill，正文编辑器支持全屏编辑）、标签式收件人/抄送输入（空格/逗号/分号分隔，粘贴可批量拆分、标签可就地编辑）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。接收侧规范解析并展示 `Sender` / `Reply-To` / `References` 等标准头，发送侧自动生成 `Date` / `Message-ID` 并支持 `Reply-To` / `In-Reply-To` / `References`，回复时自动写线程链；发件 `From` 支持按邮箱配置**发件人显示名**（`mailboxes.sender_name`，留空则收件人只看到邮箱地址）；对缺失/畸形/非标头做防御式降级，保证邮件仍可入库。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
 - **登录**：用户名密码（默认 `admin`）与自有 OIDC 单点登录二选一，JWT 会话（默认 7 天），登录接口内存限速 10 次/分钟/IP。
 - **邮件地址化浏览**：打开某封邮件时地址栏变为 `/mail/<id>`，可复制该地址直达或刷新后仍停在该邮件；合并账户下点击邮件不会把左侧邮箱切换成该邮件所属邮箱。
 - **免登录分享**：登录后可为某封邮件生成带签名密钥的分享链接（`/share/<token>`）。收件人无需登录即可查看该封邮件正文与该邮件附件，看不到其它邮件、也不能改动任何设置；分享令牌与登录令牌密钥隔离、类型互斥，不能互相冒用。密钥生成与令牌格式见下文「免登录分享」。
@@ -141,7 +141,7 @@ cd ..\Backend; npm start            # 监听 :3000，自动托管 dist 并 SPA �
 - Google scope：`https://mail.google.com/` + `https://www.googleapis.com/auth/userinfo.email`
 - Microsoft scope（单资源，不含 Graph）：`openid email offline_access https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send`
 
-OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关键词；要换账号需删除后重新授权。
+OAuth 邮箱的编辑界面只开放名称、发件人名称、同步间隔、钉钉开关与关键词；要换账号需删除后重新授权。
 
 **自定义 IMAP/SMTP 邮箱**（QQ / 163 / 企业自建等）走界面表单，保存前会先测 IMAP 登录与 SMTP verify。注意 Gmail 已停用普通密码登录，需用应用专用密码；Outlook 的 IMAP 基本认证已停用，请用 OAuth。
 
@@ -183,12 +183,12 @@ OAuth 邮箱的编辑界面只开放名称、同步间隔、钉钉开关与关�
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/mails` | 分页列表，query：`mailboxId`(默认必填)、`folderId?`、`seen?`、`page?`、`pageSize?`(默认 20，上限 100)。改用 `scope=merged-inbox` 时无需 `mailboxId`，聚合所有邮箱收件箱 |
-| GET | `/api/mails/:id` | 详情（含正文与附件元数据） |
+| GET | `/api/mails/:id` | 详情（含正文、附件元数据，以及 `messageId`/`inReplyTo`/`references[]`/`from`/`sender`/`replyTo`/`to`/`cc`/`date` 等头字段） |
 | GET | `/api/mails/:id/attachments/:attachmentId` | 附件流式下载 |
 | POST | `/api/mails/:id/share` | 生成该邮件的免登录分享链接，返回 `{ token, path, expiresAt }` |
 | PATCH | `/api/mails/:id` | 改已读状态 |
 | POST | `/api/mails/batch` | 批量 `seen` / `unseen` / `move` / `delete`（`permanent` 强制永久删） |
-| POST | `/api/mails/send` | multipart 发送（`to`/`cc`/`subject`/`text`/`html` + 附件，附件最多 10 个、单个 25MB；仅传 `html` 时后端自动生成纯文本备选） |
+| POST | `/api/mails/send` | multipart 发送（`to`/`cc`/`subject`/`text`/`html` + 附件，附件最多 10 个、单个 25MB；仅传 `html` 时后端自动生成纯文本备选）。可选 `replyTo`/`inReplyTo`/`references`（JSON 数组字符串或空白分隔）/`sender`；`Date` 与 `Message-ID` 未提供时自动生成 |
 
 ## 免登录分享
 
@@ -235,8 +235,8 @@ node --input-type=module -e "import { signShareToken } from './src/crypto.js'; c
 ## 数据与备份
 
 - 全部数据在 `DATA_DIR` 下：`mailflow.db`（SQLite，WAL 模式）与 `attachments/`。
-- 表：`mailboxes`、`folders`、`mails`、`attachments`；外键级联删除。
-- 只有首次初始化时 `CREATE TABLE IF NOT EXISTS`，**没有版本化迁移系统**。
+- 表：`mailboxes`、`folders`、`mails`、`attachments`；外键级联删除。`mails` 含 `sender_*` / `reply_to_*` / `reference_ids` 等头字段（`references` 头以 JSON 字符串存 `<id>` 数组；列名用 `reference_ids` 以避开 SQLite 保留字，接口字段仍为 `references`）；`mailboxes.sender_name` 为发件人显示名。
+- 只有首次初始化时 `CREATE TABLE IF NOT EXISTS`；**没有版本化迁移系统**，新增列以幂等的 `PRAGMA table_info` + `ALTER TABLE ADD COLUMN` 兜底。
 - 凭据以 `iv:tag:data` 三段 base64 存于 `password_enc` / `access_token_enc` / `refresh_token_enc` / `dingtalk_secret_enc`，密钥由 `APP_SECRET` 经 scrypt 派生。**更换 `APP_SECRET` 会导致所有已存凭据不可解密**，需重新授权/填密码。
 - 没有用户表，应用是单用户模型；登录密码只存环境变量，改密码需重启进程。
 

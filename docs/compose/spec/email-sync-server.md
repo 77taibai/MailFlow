@@ -75,7 +75,7 @@ commits: e41abc0..d8c3b01
   1. 建连（password 或 XOAUTH2）；
   2. upsert folders；
   3. 对每个 sync_enabled folder：首扫/回填补齐最新 `SYNC_BACKFILL_COUNT`（默认 50）封；增量取 `uid > last_uid`（过滤 `uid <= last_uid` 的 `n:*` 语义尾巴）；
-  4. mailparser 解析 source，入库 mails（subject/from/to/cc/date/snippet/body_html/body_text/size/message_id/flags/seen），附件写盘 `DATA_DIR/attachments/<mailId>/` 并登记 attachments 表；
+  4. mailparser 解析 source，入库 mails（subject/from/sender/reply-to/to/cc/date/snippet/body_html/body_text/size/message_id/in_reply_to/reference_ids/flags/seen；头字段经 `mailHeaders.js` 防御式归一，畸形输入降级为 null 而不中断同步），附件写盘 `DATA_DIR/attachments/<mailId>/` 并登记 attachments 表；
   5. 更新 last_uid、last_sync_at、status。
 - mails 唯一键 `(mailbox_id, folder_id, uid)`；本机代发副本 uid 允许 NULL（部分唯一索引 `WHERE uid IS NOT NULL`）。
 - 调度：30s tick，`next = last_sync_at + (mailbox.sync_interval_sec || SYNC_INTERVAL_SEC)*1000`；启动后 30s 先跑一轮（`SYNC_ON_START=0` 可关）；提供手动立即同步接口。
@@ -91,7 +91,7 @@ commits: e41abc0..d8c3b01
 
 ### 发送邮件
 
-- `POST /api/mails/send`（multipart，multer 限制单文件 25MB、最多 10 个）：to/cc 用邮箱列表解析，subject/text/html + files → nodemailer SMTP（password 或 XOAUTH2 accessToken）。前端用 Quill 富文本编辑器生成 html 并附带纯文本；仅传 html 时后端由 html 兜底生成 text，产出 multipart/alternative。
+- `POST /api/mails/send`（multipart，multer 限制单文件 25MB、最多 10 个）：to/cc 用邮箱列表解析，subject/text/html + files → nodemailer SMTP（password 或 XOAUTH2 accessToken）。前端用 Quill 富文本编辑器生成 html 并附带纯文本；仅传 html 时后端由 html 兜底生成 text，产出 multipart/alternative。可选 `replyTo`/`inReplyTo`/`references`/`sender` 透传给 `MailComposer`，`Date`/`Message-ID` 未提供时自动生成；`sender` 与 `from` 相同则省略。
 - 发送后 best-effort IMAP APPEND 到该邮箱 `\Sent` folder；失败则本地落一条 folder=已存在 Sent path（找不到则虚拟 `Sent`）的副本（uid NULL, \Seen），保证"已发送"可见。
 
 ### 钉钉推送

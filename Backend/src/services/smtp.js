@@ -3,6 +3,7 @@ import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import { db } from '../db.js';
 import { getCredentials } from './mailboxAuth.js';
 import { getSentFolderId, openConnection } from './imap.js';
+import { normalizeMessageId, normalizeReferences } from './mailHeaders.js';
 
 export async function buildTransport(mailbox) {
   const creds = await getCredentials(mailbox);
@@ -41,6 +42,18 @@ function parseAddressList(input) {
   return list;
 }
 
+function splitAddress(value) {
+  const text = String(value || '').trim();
+  if (!text) return { name: null, address: null };
+  const match = text.match(/^(.*?)\s*<([^>]+)>\s*$/);
+  if (match) {
+    const name = match[1].replace(/^["']|["']$/g, '').trim();
+    const address = match[2].trim();
+    return { name: name || null, address: address || null };
+  }
+  return { name: null, address: text };
+}
+
 function htmlToText(html) {
   return String(html || '')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -60,16 +73,38 @@ function htmlToText(html) {
     .trim();
 }
 
-export async function sendMail(mailbox, { to, cc, subject, text, html, attachments }) {
+export async function sendMail(
+  mailbox,
+  { to, cc, subject, text, html, attachments, replyTo, inReplyTo, references, sender, messageId, date }
+) {
   const toList = parseAddressList(to);
   if (!toList.length) throw new Error('收件人不能为空');
   const ccList = parseAddressList(cc);
+  const refList = normalizeReferences(references);
+  const inReplyToId = normalizeMessageId(inReplyTo);
+  const messageIdValue = normalizeMessageId(messageId);
+  const replyToText = String(replyTo || '').trim();
+  const senderText = String(sender || '').trim();
+  const senderValue =
+    senderText && senderText.toLowerCase() !== String(mailbox.email || '').toLowerCase()
+      ? senderText
+      : '';
+  const replyParts = splitAddress(replyToText);
+  const senderParts = splitAddress(senderValue);
+  const fromName = String(mailbox.sender_name || '').trim();
+  const fromValue = fromName ? { name: fromName, address: mailbox.email } : mailbox.email;
 
   const htmlContent = String(html || '').trim();
   const textContent = String(text || '').trim() || (htmlContent ? htmlToText(htmlContent) : '');
 
   const mailOptions = {
-    from: mailbox.email,
+    from: fromValue,
+    sender: senderValue || undefined,
+    replyTo: replyToText || undefined,
+    inReplyTo: inReplyToId || undefined,
+    references: refList.length ? refList : undefined,
+    messageId: messageIdValue || undefined,
+    date: date || undefined,
     to: toList.join(', '),
     cc: ccList.length ? ccList.join(', ') : undefined,
     subject: subject || '',
@@ -97,16 +132,23 @@ export async function sendMail(mailbox, { to, cc, subject, text, html, attachmen
   const sentDate = dateMatch ? Date.parse(dateMatch[1]) : now;
 
   db.prepare(
-    `INSERT INTO mails(mailbox_id, folder_id, uid, message_id, subject, from_name, from_addr,
-      to_list, cc_list, date, snippet, body_text, body_html, flags, seen, size, has_attachments, created_at)
-     VALUES(?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
+    `INSERT INTO mails(mailbox_id, folder_id, uid, message_id, in_reply_to, reference_ids, subject, from_name, from_addr,
+      sender_name, sender_addr, reply_to_name, reply_to_addr, to_list, cc_list, date, snippet, body_text, body_html,
+      flags, seen, size, has_attachments, created_at)
+     VALUES(?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`
   ).run(
     mailbox.id,
     sentFolderId,
-    info.messageId || null,
+    info.messageId || messageIdValue || null,
+    inReplyToId,
+    refList.length ? JSON.stringify(refList) : null,
     subject || '',
-    mailbox.name,
+    fromName || null,
     mailbox.email,
+    senderParts.name,
+    senderParts.address,
+    replyParts.name,
+    replyParts.address,
     toList.join(', '),
     ccList.length ? ccList.join(', ') : null,
     Number.isFinite(sentDate) ? sentDate : now,

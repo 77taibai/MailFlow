@@ -14,6 +14,7 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS mailboxes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
+  sender_name TEXT,
   email TEXT NOT NULL,
   provider TEXT NOT NULL DEFAULT 'custom',
   auth_type TEXT NOT NULL DEFAULT 'password',
@@ -62,9 +63,14 @@ CREATE TABLE IF NOT EXISTS mails (
   uid INTEGER,
   message_id TEXT,
   in_reply_to TEXT,
+  reference_ids TEXT,
   subject TEXT NOT NULL DEFAULT '',
   from_name TEXT,
   from_addr TEXT,
+  sender_name TEXT,
+  sender_addr TEXT,
+  reply_to_name TEXT,
+  reply_to_addr TEXT,
   to_list TEXT,
   cc_list TEXT,
   date INTEGER,
@@ -93,6 +99,24 @@ CREATE TABLE IF NOT EXISTS attachments (
   created_at INTEGER NOT NULL
 );
 `);
+
+function ensureColumn(table, column, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (columns.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+for (const [column, definition] of [
+  ['sender_name', 'TEXT'],
+  ['sender_addr', 'TEXT'],
+  ['reply_to_name', 'TEXT'],
+  ['reply_to_addr', 'TEXT'],
+  ['reference_ids', 'TEXT'],
+]) {
+  ensureColumn('mails', column, definition);
+}
+
+ensureColumn('mailboxes', 'sender_name', 'TEXT');
 
 export function getMailbox(id) {
   return db.prepare('SELECT * FROM mailboxes WHERE id = ?').get(id) || null;

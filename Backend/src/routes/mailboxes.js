@@ -52,6 +52,7 @@ mailboxesRouter.get('/', (req, res) => {
     items: mailboxes.map((mb) => ({
       id: mb.id,
       name: mb.name,
+      senderName: mb.sender_name,
       email: mb.email,
       provider: mb.provider,
       authType: mb.auth_type,
@@ -110,13 +111,14 @@ mailboxesRouter.post('/', (req, res) => {
   const t = now();
   const info = db
     .prepare(
-      `INSERT INTO mailboxes(name, email, provider, auth_type, imap_host, imap_port, imap_secure,
+      `INSERT INTO mailboxes(name, sender_name, email, provider, auth_type, imap_host, imap_port, imap_secure,
         smtp_host, smtp_port, smtp_secure, username, password_enc, sync_interval_sec,
         dingtalk_enabled, dingtalk_include, dingtalk_exclude, created_at, updated_at)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       body.name,
+      body.senderName ? String(body.senderName).trim() || null : null,
       body.email,
       body.provider || 'custom',
       authType,
@@ -161,6 +163,7 @@ mailboxesRouter.put('/:id', (req, res) => {
   const params = [];
   const fields = {
     name: body.name,
+    senderName: body.senderName !== undefined ? String(body.senderName).trim() || null : undefined,
     email: body.email,
     imapHost: body.imapHost,
     imapPort: body.imapPort !== undefined ? Number(body.imapPort) : undefined,
@@ -176,6 +179,7 @@ mailboxesRouter.put('/:id', (req, res) => {
   };
   const columnMap = {
     name: 'name',
+    senderName: 'sender_name',
     email: 'email',
     imapHost: 'imap_host',
     imapPort: 'imap_port',

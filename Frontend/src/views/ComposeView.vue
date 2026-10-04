@@ -80,7 +80,7 @@ const mailboxes = ref([]);
 const sending = ref(false);
 const fileList = ref([]);
 const editorRef = ref();
-const form = reactive({ mailboxId: null, to: [], cc: [], subject: '', html: '' });
+const form = reactive({ mailboxId: null, to: [], cc: [], subject: '', html: '', inReplyTo: '', references: [] });
 
 function escapeHtml(value) {
   return String(value == null ? '' : value)
@@ -129,8 +129,13 @@ async function loadReply(id) {
   try {
     const mail = await api.get(`/mails/${id}`);
     if (mail.mailboxId) selectMailbox(mail.mailboxId);
-    form.to = mail.fromAddr ? [mail.fromAddr] : [];
+    const replyTarget = mail.replyToAddr || mail.fromAddr;
+    form.to = replyTarget ? [replyTarget] : [];
     form.subject = mail.subject?.startsWith('Re:') ? mail.subject : `Re: ${mail.subject || ''}`;
+    const references = Array.isArray(mail.references) ? [...mail.references] : [];
+    if (mail.messageId && !references.includes(mail.messageId)) references.push(mail.messageId);
+    form.inReplyTo = mail.messageId || '';
+    form.references = references;
     form.html = quoteHtml(mail);
   } catch (e) {
     ElMessage.error(errMsg(e));
@@ -153,6 +158,8 @@ async function send() {
     fd.append('subject', form.subject);
     fd.append('html', form.html);
     fd.append('text', editorRef.value ? editorRef.value.getText() : '');
+    if (form.inReplyTo) fd.append('inReplyTo', form.inReplyTo);
+    if (form.references.length) fd.append('references', JSON.stringify(form.references));
     for (const f of fileList.value) {
       fd.append('attachments', f.raw);
     }

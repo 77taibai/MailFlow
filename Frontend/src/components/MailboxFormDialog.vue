@@ -19,6 +19,9 @@
       <el-form-item label="名称" required>
         <el-input v-model="form.name" placeholder="显示名称" />
       </el-form-item>
+      <el-form-item label="发件人名称">
+        <el-input v-model="form.senderName" placeholder="发件时显示的名字，留空则只显示邮箱地址" />
+      </el-form-item>
 
       <template v-if="!isOauth">
         <el-form-item label="邮箱地址" required>
@@ -130,6 +133,7 @@ const dialogTitle = computed(() => {
 
 const form = reactive({
   name: '',
+  senderName: '',
   email: '',
   username: '',
   password: '',
@@ -149,6 +153,7 @@ function open(row) {
   editing.value = row;
   Object.assign(form, {
     name: row?.name || '',
+    senderName: row?.senderName || '',
     email: row?.email || '',
     username: row?.username || '',
     password: '',
@@ -214,6 +219,7 @@ async function save() {
       const payload = isOauth.value
         ? {
             name: form.name,
+            senderName: form.senderName,
             syncIntervalSec: form.syncIntervalSec,
             dingtalkEnabled: form.dingtalkEnabled,
             dingtalkInclude: form.dingtalkInclude,

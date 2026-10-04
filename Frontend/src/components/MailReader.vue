@@ -23,7 +23,17 @@
           <span class="from"><b>{{ mail.fromName || '' }}</b> {{ mail.fromAddr ? `<${mail.fromAddr}>` : '' }}</span>
           <span class="date">{{ formatDateTime(mail.date) }}</span>
         </div>
+        <div
+          class="meta to"
+          v-if="mail.senderAddr && mail.senderAddr.toLowerCase() !== String(mail.fromAddr || '').toLowerCase()"
+        >
+          发送者: <b>{{ mail.senderName || '' }}</b> {{ `<${mail.senderAddr}>` }}
+        </div>
+        <div class="meta to" v-if="mail.replyToAddr">
+          回复至: <b>{{ mail.replyToName || '' }}</b> {{ `<${mail.replyToAddr}>` }}
+        </div>
         <div class="meta to" v-if="mail.toList">收件人: {{ mail.toList }}</div>
+        <div class="meta to" v-if="mail.ccList">抄送: {{ mail.ccList }}</div>
         <div class="attachments" v-if="mail.attachments && mail.attachments.length">
           <div class="att-title">附件 ({{ mail.attachments.length }})</div>
           <div class="att-list">

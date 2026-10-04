@@ -23,6 +23,17 @@ function getFolder(id) {
   return db.prepare('SELECT * FROM folders WHERE id = ?').get(Number(id)) || null;
 }
 
+function parseReferences(value) {
+  if (!value) return [];
+  try {
+    const arr = JSON.parse(value);
+    if (Array.isArray(arr)) return arr.map(String);
+  } catch {
+    /* fall back to whitespace-separated parsing */
+  }
+  return String(value).split(/\s+/).filter(Boolean);
+}
+
 mailsRouter.get('/', (req, res) => {
   const { mailboxId, folderId, seen, scope } = req.query;
 
@@ -96,9 +107,15 @@ mailsRouter.get('/:id', (req, res) => {
     folderId: mail.folder_id,
     uid: mail.uid,
     messageId: mail.message_id,
+    inReplyTo: mail.in_reply_to,
+    references: parseReferences(mail.reference_ids),
     subject: mail.subject,
     fromName: mail.from_name,
     fromAddr: mail.from_addr,
+    senderName: mail.sender_name,
+    senderAddr: mail.sender_addr,
+    replyToName: mail.reply_to_name,
+    replyToAddr: mail.reply_to_addr,
     toList: mail.to_list,
     ccList: mail.cc_list,
     date: mail.date,
@@ -340,8 +357,22 @@ mailsRouter.post('/batch', async (req, res) => {
   }
 });
 
+function parseReferencesField(value) {
+  const text = String(value || '').trim();
+  if (!text) return undefined;
+  if (text.startsWith('[')) {
+    try {
+      const arr = JSON.parse(text);
+      if (Array.isArray(arr)) return arr;
+    } catch {
+      /* fall back to whitespace-separated parsing */
+    }
+  }
+  return text;
+}
+
 mailsRouter.post('/send', upload.array('attachments', 10), async (req, res) => {
-  const { mailboxId, to, cc, subject, text, html } = req.body || {};
+  const { mailboxId, to, cc, subject, text, html, replyTo, inReplyTo, references, sender } = req.body || {};
   if (!mailboxId) return res.status(400).json({ error: '缺少 mailboxId' });
   const mailbox = getMailbox(mailboxId);
   if (!mailbox) return res.status(404).json({ error: '邮箱不存在' });
@@ -352,6 +383,10 @@ mailsRouter.post('/send', upload.array('attachments', 10), async (req, res) => {
       subject,
       text,
       html,
+      replyTo,
+      inReplyTo,
+      references: parseReferencesField(references),
+      sender,
       attachments: req.files || [],
     });
     res.json({ ok: true, messageId: result.messageId });
