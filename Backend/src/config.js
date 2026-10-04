@@ -35,7 +35,6 @@ export const config = {
   frontendOrigin: (env.FRONTEND_ORIGIN || '').replace(/\/+$/, ''),
   appSecret,
   dataDir: path.resolve(env.DATA_DIR || './data'),
-  authUsername: env.AUTH_USERNAME || 'admin',
   authPassword,
   jwtTtlHours: num('JWT_TTL_HOURS', 168),
   shareSecret: env.SHARE_SECRET || '',

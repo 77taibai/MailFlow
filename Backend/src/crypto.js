@@ -40,8 +40,10 @@ export function verifyToken(token) {
   return jwt.verify(token, config.appSecret, { algorithms: ['HS256'] });
 }
 
-export function signSession(username, via) {
-  return signToken({ sub: username, via }, config.jwtTtlHours * 3600);
+export function signSession(via, identity) {
+  const payload = { via };
+  if (identity) payload.sub = identity;
+  return signToken(payload, config.jwtTtlHours * 3600);
 }
 
 export function signShareToken(mailId, ttlSeconds = 0) {

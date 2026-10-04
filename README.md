@@ -10,7 +10,7 @@
 - **任意 IMAP/SMTP 邮箱**：表单手填服务器与授权码，保存前可测试 IMAP 登录 + SMTP 连通。
 - **Gmail / Outlook 一键授权**：OAuth2 全链路（IMAP + SMTP 双通道），服务器地址、账号、凭据自动生成，无需手填；access token 到期前自动用 refresh token 刷新。
 - **邮件收发**：滚动自动加载（向下续载更早、向上续载更新）、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill，正文编辑器支持全屏编辑）、标签式收件人/抄送输入（空格/逗号/分号分隔，粘贴可批量拆分、标签可就地编辑）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。接收侧规范解析并展示 `Sender` / `Reply-To` / `References` 等标准头，发送侧自动生成 `Date` / `Message-ID` 并支持 `Reply-To` / `In-Reply-To` / `References`，回复时自动写线程链；发件 `From` 支持按邮箱配置**发件人显示名**（`mailboxes.sender_name`，留空则收件人只看到邮箱地址）；对缺失/畸形/非标头做防御式降级，保证邮件仍可入库。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
-- **登录**：用户名密码（默认 `admin`）与自有 OIDC 单点登录二选一，JWT 会话（默认 7 天），登录接口内存限速 10 次/分钟/IP。
+- **登录**：单用户密码登录与自有 OIDC 单点登录二选一，JWT 会话（默认 7 天），登录接口内存限速 10 次/分钟/IP。
 - **邮件地址化浏览**：打开某封邮件时地址栏变为 `/mail/<id>`，可复制该地址直达或刷新后仍停在该邮件；合并账户下点击邮件不会把左侧邮箱切换成该邮件所属邮箱。
 - **免登录分享**：登录后可为某封邮件生成带签名密钥的分享链接（`/share/<token>`）。收件人无需登录即可查看该封邮件正文与该邮件附件，看不到其它邮件、也不能改动任何设置；分享令牌与登录令牌密钥隔离、类型互斥，不能互相冒用。密钥生成与令牌格式见下文「免登录分享」。
 - **钉钉推送**：全局 `.env` 配置（填 webhook 即启用），每邮箱独立开关，主题关键词白/黑名单，最大年龄窗口（默认 48h，防止首次回填轰炸），加签、队列限速防频控。
@@ -80,7 +80,6 @@ Copy-Item Backend\.env.example Backend\.env
 PORT=3000
 APP_URL=http://localhost:3000
 APP_SECRET=<长随机字符串，用于 JWT 签名与凭据加密>
-AUTH_USERNAME=admin
 AUTH_PASSWORD=<你的登录密码>
 DATA_DIR=./data
 ```
@@ -95,7 +94,7 @@ cd Backend; npm run dev
 cd Frontend; npm run dev
 ```
 
-浏览器打开 <http://localhost:5173>，默认账号 `admin` / 你在 `.env` 里设的密码。
+浏览器打开 <http://localhost:5173>，用你在 `.env` 里设的 `AUTH_PASSWORD` 登录。
 
 ### 4. 生产模式（单端口）
 
@@ -115,8 +114,7 @@ cd ..\Backend; npm start            # 监听 :3000，自动托管 dist 并 SPA �
 | `FRONTEND_ORIGIN` | 空（用 `APP_URL`） | 授权回调后跳回的前端地址（dev 为 `http://localhost:5173`） |
 | `APP_SECRET` | **必填** | JWT 签名 + 凭据加密密钥（scrypt 派生） |
 | `DATA_DIR` | `./data` | SQLite 与附件目录（相对进程工作目录） |
-| `AUTH_USERNAME` | `admin` | 登录用户名 |
-| `AUTH_PASSWORD` | **必填** | 登录密码（明文存 env，不落库） |
+| `AUTH_PASSWORD` | **必填** | 单用户登录密码（明文存 env，不落库） |
 | `JWT_TTL_HOURS` | `168` | 登录态有效期（小时） |
 | `SHARE_SECRET` | 空 | 分享链接签名密钥；留空则从 `APP_SECRET` 用独立 salt 派生 |
 | `SHARE_TTL_HOURS` | `168` | 分享链接有效期（小时），`0` 表示永不过期 |
@@ -156,7 +154,7 @@ OAuth 邮箱的编辑界面只开放名称、发件人名称、同步间隔、�
 |---|---|---|
 | GET | `/api/health` | 存活探针 |
 | GET | `/api/auth/config` | 返回 `{ oidcEnabled }` 供登录页渲染按钮 |
-| POST | `/api/auth/login` | 用户名密码登录，换取 JWT |
+| POST | `/api/auth/login` | 单用户密码登录，换取 JWT |
 | GET | `/api/auth/oidc/login` | 跳转 OIDC 授权页 |
 | GET | `/api/auth/oidc/callback` | OIDC 回调，token 经 URL fragment 回传前端 |
 | GET | `/api/mailboxes/oauth/:provider/callback` | 邮箱 OAuth 回调 |

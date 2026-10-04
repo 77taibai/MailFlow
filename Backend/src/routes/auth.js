@@ -66,18 +66,19 @@ authRouter.post('/login', (req, res) => {
   if (!checkRateLimit(ip)) {
     return res.status(429).json({ error: '尝试过于频繁，请稍后再试' });
   }
-  const { username, password } = req.body || {};
-  if (typeof username !== 'string' || typeof password !== 'string') {
+  const { password } = req.body || {};
+  if (typeof password !== 'string') {
     return res.status(400).json({ error: '参数不完整' });
   }
-  const ok = safeEqual(username, config.authUsername) && safeEqual(password, config.authPassword);
-  if (!ok) return res.status(401).json({ error: '用户名或密码错误' });
+  if (!safeEqual(password, config.authPassword)) {
+    return res.status(401).json({ error: '密码错误' });
+  }
   loginAttempts.delete(ip);
-  res.json({ token: signSession(username, 'password'), username });
+  res.json({ token: signSession('password') });
 });
 
 authRouter.get('/me', requireAuth, (req, res) => {
-  res.json({ username: req.user.sub, via: req.user.via });
+  res.json({ via: req.user.via });
 });
 
 authRouter.get('/oidc/login', async (req, res, next) => {
@@ -123,7 +124,7 @@ authRouter.get('/oidc/callback', async (req, res) => {
     if (config.oidc.allowedSub && sub !== config.oidc.allowedSub) {
       return res.redirect(`${frontend}/login?error=${encodeURIComponent('该账号不被允许登录')}`);
     }
-    const token = signSession(sub, 'oidc');
+    const token = signSession('oidc', sub);
     res.redirect(`${frontend}/oidc-callback#token=${encodeURIComponent(token)}`);
   } catch (err) {
     res.redirect(`${frontend}/login?error=${encodeURIComponent(err.message || 'oidc_failed')}`);

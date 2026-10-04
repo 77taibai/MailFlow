@@ -5,11 +5,6 @@
       <p class="subtitle">电子邮件同步中心</p>
       <el-form @submit.prevent="doLogin">
         <el-form-item>
-          <el-input v-model="username" placeholder="用户名" size="large">
-            <template #prefix><el-icon><User /></el-icon></template>
-          </el-input>
-        </el-form-item>
-        <el-form-item>
           <el-input v-model="password" type="password" placeholder="密码" size="large" show-password>
             <template #prefix><el-icon><Lock /></el-icon></template>
           </el-input>
@@ -41,7 +36,6 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 
-const username = ref('');
 const password = ref('');
 const loading = ref(false);
 const oidcEnabled = ref(false);
@@ -59,16 +53,13 @@ onMounted(async () => {
 });
 
 async function doLogin() {
-  if (!username.value || !password.value) {
-    ElMessage.warning('请输入用户名和密码');
+  if (!password.value) {
+    ElMessage.warning('请输入密码');
     return;
   }
   loading.value = true;
   try {
-    const data = await api.post('/auth/login', {
-      username: username.value,
-      password: password.value,
-    });
+    const data = await api.post('/auth/login', { password: password.value });
     auth.setToken(data.token);
     router.replace('/');
   } catch (e) {

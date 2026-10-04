@@ -4,7 +4,6 @@ import api from '../api.js';
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     token: localStorage.getItem('mailflow_token') || '',
-    username: '',
   }),
   getters: {
     isLoggedIn: (state) => Boolean(state.token),
@@ -16,15 +15,13 @@ export const useAuthStore = defineStore('auth', {
     },
     async fetchMe() {
       try {
-        const data = await api.get('/auth/me');
-        this.username = data.username;
+        await api.get('/auth/me');
       } catch {
         this.logout();
       }
     },
     logout() {
       this.token = '';
-      this.username = '';
       localStorage.removeItem('mailflow_token');
     },
   },

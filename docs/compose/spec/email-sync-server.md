@@ -51,7 +51,7 @@ commits: e41abc0..d8c3b01
 
 ### 认证（单用户）
 
-- 密码登录：`AUTH_USERNAME` / `AUTH_PASSWORD`（常量时间比较，防时序攻击），登录内存限速（10 次/分钟/IP）。
+- 密码登录：仅 `AUTH_PASSWORD`（单用户，无用户名；常量时间比较，防时序攻击），登录内存限速（10 次/分钟/IP）。
 - 两种登录成功均签发 HS256 JWT（`APP_SECRET`，TTL `JWT_TTL_HOURS` 默认 168h），前端存 localStorage，`Authorization: Bearer`；所有 `/api/*`（除 auth/login、auth/config、auth/oidc/*、health）需鉴权；401 统一 `{ error }`。
 - OIDC：`.env` 配 `OIDC_ISSUER/OIDC_CLIENT_ID/OIDC_CLIENT_SECRET/OIDC_SCOPES`（默认 `openid`），回调固定为 `${APP_URL}/api/auth/oidc/callback`。Authorization Code Flow（openid-client v6 discovery/buildAuthorizationUrl/authorizationCodeGrant，state 用 APP_SECRET 签名 JWT 防 CSRF，10 分钟有效）。`OIDC_ALLOWED_SUB` 可选白名单（比对 IdP 返回的 `sub` claim）。登录成功重定向 `${FRONTEND_ORIGIN}/oidc-callback#token=...`。issuer 为 http:// 时需 `OIDC_INSECURE=1` 显式允许。
 - `GET /api/auth/config`（公开）返回 `{ oidcEnabled }` 供登录页渲染按钮。
@@ -102,11 +102,11 @@ commits: e41abc0..d8c3b01
 
 ### 配置（.env）
 
-`PORT, APP_URL, FRONTEND_ORIGIN, APP_SECRET, DATA_DIR, AUTH_USERNAME, AUTH_PASSWORD, JWT_TTL_HOURS, SYNC_INTERVAL_SEC, SYNC_BACKFILL_COUNT, SYNC_ON_START, PUSH_MAX_AGE_HOURS, DINGTALK_WEBHOOK_URL, DINGTALK_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT, OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_SCOPES, OIDC_ALLOWED_SUB, OIDC_INSECURE` — 以 `.env.example` 形式交付（带注释）。
+`PORT, APP_URL, FRONTEND_ORIGIN, APP_SECRET, DATA_DIR, AUTH_PASSWORD, JWT_TTL_HOURS, SYNC_INTERVAL_SEC, SYNC_BACKFILL_COUNT, SYNC_ON_START, PUSH_MAX_AGE_HOURS, DINGTALK_WEBHOOK_URL, DINGTALK_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET, MICROSOFT_TENANT, OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_SCOPES, OIDC_ALLOWED_SUB, OIDC_INSECURE` — 以 `.env.example` 形式交付（带注释）。
 
 ### 前端页面
 
-- `/login`：密码表单 + （若启用）OIDC 按钮；`/oidc-callback` 读 hash 存 token。
+- `/login`：密码表单（仅密码，无用户名）+ （若启用）OIDC 按钮；`/oidc-callback` 读 hash 存 token。
 - `/`：三栏邮件台 —— 左：邮箱与文件夹树（仅显示已开启同步的文件夹；含未读数、管理入口；顶部“合并账户”聚合各邮箱收件箱，默认进入）；中：邮件列表（勾选批量、未读加粗、附件图标、合并时标注来源邮箱）；右：阅读窗（详情 iframe、附件下载、已读/未读/移动/删除/回复）；撰写对话框正文用 Quill 富文本（加粗/斜体/列表/链接等），回复时以引用块预填纯文本内容。合并账户下“移动”不可用，“同步”触发全部邮箱。
 - `/mailboxes`：邮箱 CRUD、连接测试、立即同步、Gmail/Outlook OAuth 授权按钮、每邮箱钉钉开关与关键词、文件夹同步开关（在「编辑邮箱」弹窗内的「文件夹同步」区块）。
 - 无 `/settings` 页面：钉钉推送与全局同步间隔只在 `.env` 中配置，重启后端生效。
