@@ -165,11 +165,11 @@
             </dd>
           </div>
         </dl>
-        <div class="row-actions detail-actions">
-          <el-button size="small" @click="testMailbox(selectedMailbox)">测试</el-button>
-          <el-button size="small" :loading="selectedMailbox._syncing" @click="syncMailbox(selectedMailbox)">同步</el-button>
-          <el-button size="small" type="primary" @click="openEdit(selectedMailbox)">编辑</el-button>
-          <el-button size="small" type="danger" @click="removeMailbox(selectedMailbox)">删除</el-button>
+        <div class="detail-actions">
+          <el-button @click="testMailbox(selectedMailbox)">测试</el-button>
+          <el-button :loading="selectedMailbox._syncing" @click="syncMailbox(selectedMailbox)">同步</el-button>
+          <el-button type="primary" @click="openEdit(selectedMailbox)">编辑</el-button>
+          <el-button type="danger" @click="removeMailbox(selectedMailbox)">删除</el-button>
         </div>
       </template>
     </div>
@@ -385,8 +385,14 @@ onMounted(load);
   word-break: break-word;
 }
 .detail-actions {
-  flex-wrap: wrap;
-  padding-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+}
+.detail-actions .el-button {
+  width: 100%;
+  margin-left: 0;
 }
 @media (max-width: 767.98px) {
   .page-header {

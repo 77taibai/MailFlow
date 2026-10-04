@@ -123,6 +123,8 @@ async function download(att) {
     ElMessage.error(errMsg(e));
   }
 }
+
+defineExpose({ shareMail, toggleSeen, deleteMail });
 </script>
 
 <style scoped>
@@ -218,6 +220,9 @@ async function download(att) {
   }
   .text-body {
     padding: 12px;
+  }
+  .actions {
+    display: none;
   }
 }
 </style>

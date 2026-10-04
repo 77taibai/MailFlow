@@ -57,8 +57,22 @@
     <el-main class="reader-pane" v-show="!isMobile || currentMail">
       <div class="mobile-bar reader-back" v-if="isMobile && currentMail">
         <el-button :icon="ArrowLeft" text @click="closeMail" />
+        <div class="reader-actions">
+          <el-tooltip content="回复">
+            <el-button :icon="EditPen" text @click="prefillReply(currentMail)" />
+          </el-tooltip>
+          <el-tooltip content="分享">
+            <el-button :icon="Share" text @click="readerRef?.shareMail()" />
+          </el-tooltip>
+          <el-tooltip :content="currentMail.seen ? '标记未读' : '标记已读'">
+            <el-button :icon="currentMail.seen ? View : Hide" text @click="readerRef?.toggleSeen()" />
+          </el-tooltip>
+          <el-tooltip content="删除">
+            <el-button :icon="Delete" text type="danger" @click="readerRef?.deleteMail()" />
+          </el-tooltip>
+        </div>
       </div>
-      <mail-reader :mail="currentMail" @refresh="resetMails" @reply="prefillReply" @deleted="onMailDeleted" />
+      <mail-reader ref="readerRef" :mail="currentMail" @refresh="resetMails" @reply="prefillReply" @deleted="onMailDeleted" />
     </el-main>
 
     <el-drawer
@@ -103,7 +117,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Refresh, EditPen, Menu, ArrowLeft } from '@element-plus/icons-vue';
+import { Refresh, EditPen, Menu, ArrowLeft, Share, Delete, View, Hide } from '@element-plus/icons-vue';
 import api, { errMsg } from '../api.js';
 import { useAuthStore } from '../stores/auth.js';
 import { useIsMobile } from '../composables/useIsMobile.js';
@@ -130,6 +144,7 @@ const hasMoreNewer = ref(false);
 const loadingOlder = ref(false);
 const loadingNewer = ref(false);
 const listRef = ref(null);
+const readerRef = ref(null);
 const selectedIds = ref([]);
 const currentMail = ref(null);
 const listLoading = ref(false);
@@ -543,6 +558,16 @@ onMounted(() => {
   white-space: nowrap;
   font-weight: 600;
 }
+.reader-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.reader-actions .el-button {
+  margin-left: 0;
+}
 .list-toolbar {
   display: flex;
   align-items: center;
@@ -570,7 +595,19 @@ onMounted(() => {
     width: 100%;
   }
   .list-toolbar {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 8px 6px;
+  }
+  .list-toolbar > .spacer {
+    display: none;
+  }
+  .list-toolbar > .el-button {
+    --el-button-size: 32px;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 4px;
+    font-size: 12px;
   }
   .compose-btn {
     display: none;
