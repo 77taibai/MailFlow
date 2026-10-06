@@ -129,7 +129,8 @@ cd ..\Backend; npm start            # 监听 :3000，托管 ./static 并 SPA 回
 | `FRONTEND_DIST` | `./static`（相对后端工作目录） | 前端构建产物目录 |
 | `APP_SECRET` | **必填** | JWT 签名 + 凭据加密密钥（scrypt 派生） |
 | `DATA_DIR` | `./data` | SQLite 与附件目录（相对进程工作目录） |
-| `AUTH_PASSWORD` | **必填** | 单用户登录密码（明文存 env，不落库） |
+| `AUTH_PASSWORD` | **必填**（`DISABLE_PASSWORD_LOGIN=1` 时可空） | 单用户登录密码（明文存 env，不落库） |
+| `DISABLE_PASSWORD_LOGIN` | `0` | 设 `1` 禁用密码登录，只允许 OIDC 登录（此时必须配置 OIDC 三项） |
 | `JWT_TTL_HOURS` | `168` | 登录态有效期（小时） |
 | `SHARE_SECRET` | 空 | 分享链接签名密钥；留空则从 `APP_SECRET` 用独立 salt 派生 |
 | `SHARE_TTL_HOURS` | `168` | 分享链接有效期（小时），`0` 表示永不过期 |
@@ -168,8 +169,8 @@ OAuth 邮箱的编辑界面只开放名称、发件人名称、同步间隔、�
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/health` | 存活探针 |
-| GET | `/api/auth/config` | 返回 `{ oidcEnabled }` 供登录页渲染按钮 |
-| POST | `/api/auth/login` | 单用户密码登录，换取 JWT |
+| GET | `/api/auth/config` | 返回 `{ oidcEnabled, passwordLoginEnabled }` 供登录页渲染按钮 |
+| POST | `/api/auth/login` | 单用户密码登录，换取 JWT（密码登录被禁用时返回 403） |
 | GET | `/api/auth/oidc/login` | 跳转 OIDC 授权页 |
 | GET | `/api/auth/oidc/callback` | OIDC 回调，token 经 URL fragment 回传前端 |
 | GET | `/api/mailboxes/oauth/:provider/callback` | 邮箱 OAuth 回调 |

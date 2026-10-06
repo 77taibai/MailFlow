@@ -58,10 +58,13 @@ async function getOidcConfig() {
 export const authRouter = Router();
 
 authRouter.get('/config', (req, res) => {
-  res.json({ oidcEnabled: oidcEnabled() });
+  res.json({ oidcEnabled: oidcEnabled(), passwordLoginEnabled: !config.passwordLoginDisabled });
 });
 
 authRouter.post('/login', (req, res) => {
+  if (config.passwordLoginDisabled) {
+    return res.status(403).json({ error: '密码登录已禁用，请使用 OIDC 登录' });
+  }
   const ip = req.ip || 'unknown';
   if (!checkRateLimit(ip)) {
     return res.status(429).json({ error: '尝试过于频繁，请稍后再试' });

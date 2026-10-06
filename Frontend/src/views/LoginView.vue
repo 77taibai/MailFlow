@@ -4,18 +4,24 @@
       <h2 class="title">MailFlow</h2>
       <p class="subtitle">电子邮件同步中心</p>
       <el-form @submit.prevent="doLogin">
-        <el-form-item>
-          <el-input v-model="password" type="password" placeholder="密码" size="large" show-password>
-            <template #prefix><el-icon><Lock /></el-icon></template>
-          </el-input>
-        </el-form-item>
-        <el-button type="primary" size="large" style="width: 100%" :loading="loading" native-type="submit">
-          登录
-        </el-button>
+        <template v-if="passwordEnabled">
+          <el-form-item>
+            <el-input v-model="password" type="password" placeholder="密码" size="large" show-password>
+              <template #prefix><el-icon><Lock /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-button type="primary" size="large" style="width: 100%" :loading="loading" native-type="submit">
+            登录
+          </el-button>
+        </template>
         <el-button
           v-if="oidcEnabled"
           size="large"
-          style="width: 100%; margin-top: 10px; margin-left: 0"
+          :style="{
+            width: '100%',
+            marginLeft: 0,
+            marginTop: passwordEnabled ? '10px' : '0',
+          }"
           @click="oidcLogin"
         >
           使用 OIDC 登录
@@ -39,6 +45,7 @@ const auth = useAuthStore();
 const password = ref('');
 const loading = ref(false);
 const oidcEnabled = ref(false);
+const passwordEnabled = ref(true);
 
 onMounted(async () => {
   if (route.query.error) {
@@ -47,12 +54,15 @@ onMounted(async () => {
   try {
     const data = await api.get('/auth/config');
     oidcEnabled.value = Boolean(data.oidcEnabled);
+    passwordEnabled.value = data.passwordLoginEnabled !== false;
   } catch {
     oidcEnabled.value = false;
+    passwordEnabled.value = true;
   }
 });
 
 async function doLogin() {
+  if (!passwordEnabled.value) return;
   if (!password.value) {
     ElMessage.warning('请输入密码');
     return;

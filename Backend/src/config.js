@@ -23,8 +23,10 @@ if (!appSecret) {
   throw new Error('缺少 APP_SECRET 环境变量，请在 .env 中设置（用于 JWT 签名与敏感数据加密）');
 }
 
+const passwordLoginDisabled = bool('DISABLE_PASSWORD_LOGIN', false);
+
 const authPassword = env.AUTH_PASSWORD || '';
-if (!authPassword) {
+if (!passwordLoginDisabled && !authPassword) {
   throw new Error('缺少 AUTH_PASSWORD 环境变量，请在 .env 中设置（单用户密码登录）');
 }
 
@@ -42,6 +44,7 @@ export const config = {
   appSecret,
   dataDir: path.resolve(env.DATA_DIR || './data'),
   authPassword,
+  passwordLoginDisabled,
   jwtTtlHours: num('JWT_TTL_HOURS', 168),
   shareSecret: env.SHARE_SECRET || '',
   shareTtlHours: num('SHARE_TTL_HOURS', 168),
@@ -72,6 +75,12 @@ export const config = {
 
 export function oidcEnabled() {
   return Boolean(config.oidc.issuer && config.oidc.clientId && config.oidc.clientSecret);
+}
+
+if (config.passwordLoginDisabled && !oidcEnabled()) {
+  throw new Error(
+    'DISABLE_PASSWORD_LOGIN=1 时必须配置 OIDC（OIDC_ISSUER / OIDC_CLIENT_ID / OIDC_CLIENT_SECRET），否则将无人可登录'
+  );
 }
 
 export function oauthProviderEnabled(name) {
