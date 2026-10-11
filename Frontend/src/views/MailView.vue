@@ -510,7 +510,7 @@ function onSelectMerged() {
 
 function onSelectMailbox(id) {
   selectMailbox(id);
-  sidebarOpen.value = false;
+  // 点邮箱进入二级（文件夹列表），窄屏下保持抽屉打开以便继续选文件夹
 }
 
 function onSelectFolder(id) {
