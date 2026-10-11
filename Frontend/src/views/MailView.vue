@@ -1,6 +1,6 @@
 <template>
   <el-container class="mail-page">
-    <el-aside v-if="!isMobile" width="250px" class="sidebar">
+    <el-aside v-if="!isMobile" width="250px" class="sidebar" v-loading="sidebarLoading">
       <mail-sidebar
         :mailboxes="mailboxes"
         :merged-selected="mergedSelected"
@@ -27,10 +27,10 @@
         <el-button :icon="Refresh" size="small" :loading="syncing" :disabled="!selectedMailboxId && !mergedSelected" @click="syncNow">
           同步
         </el-button>
-        <el-button size="small" :disabled="!selectedIds.length" @click="batchSeen(true)">标记已读</el-button>
-        <el-button size="small" :disabled="!selectedIds.length" @click="batchSeen(false)">标记未读</el-button>
-        <el-button size="small" :disabled="!selectedIds.length || mergedSelected" @click="moveDialogVisible = true">移动</el-button>
-        <el-button size="small" type="danger" :disabled="!selectedIds.length" @click="batchDelete">删除</el-button>
+        <el-button size="small" :loading="batchLoading === 'seen'" :disabled="!selectedIds.length || !!batchLoading" @click="batchSeen(true)">标记已读</el-button>
+        <el-button size="small" :loading="batchLoading === 'unseen'" :disabled="!selectedIds.length || !!batchLoading" @click="batchSeen(false)">标记未读</el-button>
+        <el-button size="small" :disabled="!selectedIds.length || mergedSelected || !!batchLoading" @click="moveDialogVisible = true">移动</el-button>
+        <el-button size="small" type="danger" :loading="batchLoading === 'delete'" :disabled="!selectedIds.length || !!batchLoading" @click="batchDelete">删除</el-button>
         <div class="spacer"></div>
         <el-button class="compose-btn" type="primary" :icon="EditPen" size="small" :disabled="!mailboxes.length" @click="openCompose">
           撰写
@@ -54,7 +54,7 @@
       />
     </el-main>
 
-    <el-main class="reader-pane" v-show="!isMobile || currentMail">
+    <el-main class="reader-pane" v-show="!isMobile || currentMail" v-loading="mailLoading" element-loading-text="正在加载邮件…">
       <div class="mobile-bar reader-back" v-if="isMobile && currentMail">
         <el-button :icon="ArrowLeft" text @click="closeMail" />
         <div class="reader-actions">
@@ -82,18 +82,20 @@
       :with-header="false"
       class="mail-drawer"
     >
-      <mail-sidebar
-        :mailboxes="mailboxes"
-        :merged-selected="mergedSelected"
-        :merged-unread="mergedUnread"
-        :selected-mailbox-id="selectedMailboxId"
-        :folders="folders"
-        :selected-folder-id="selectedFolderId"
-        @select-merged="onSelectMerged"
-        @select-mailbox="onSelectMailbox"
-        @select-folder="onSelectFolder"
-        @logout="onLogout"
-      />
+      <div class="drawer-body" v-loading="sidebarLoading">
+        <mail-sidebar
+          :mailboxes="mailboxes"
+          :merged-selected="mergedSelected"
+          :merged-unread="mergedUnread"
+          :selected-mailbox-id="selectedMailboxId"
+          :folders="folders"
+          :selected-folder-id="selectedFolderId"
+          @select-merged="onSelectMerged"
+          @select-mailbox="onSelectMailbox"
+          @select-folder="onSelectFolder"
+          @logout="onLogout"
+        />
+      </div>
     </el-drawer>
 
     <el-dialog v-model="moveDialogVisible" title="移动到文件夹" width="360px">
@@ -106,8 +108,8 @@
         />
       </el-select>
       <template #footer>
-        <el-button @click="moveDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!moveTarget" @click="batchMove">确定</el-button>
+        <el-button :disabled="!!batchLoading" @click="moveDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchLoading === 'move'" :disabled="!moveTarget || !!batchLoading" @click="batchMove">确定</el-button>
       </template>
     </el-dialog>
   </el-container>
@@ -118,7 +120,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Refresh, EditPen, Menu, ArrowLeft, Share, Delete, View, Hide } from '@element-plus/icons-vue';
-import api, { errMsg } from '../api.js';
+import api, { errMsg, pollSyncDone } from '../api.js';
 import { useAuthStore } from '../stores/auth.js';
 import { useIsMobile } from '../composables/useIsMobile.js';
 import MailSidebar from '../components/MailSidebar.vue';
@@ -149,6 +151,10 @@ const selectedIds = ref([]);
 const currentMail = ref(null);
 const listLoading = ref(false);
 const syncing = ref(false);
+const sidebarLoading = ref(false);
+const mailLoading = ref(false);
+// '' | 'seen' | 'unseen' | 'move' | 'delete'：当前正在执行的批量操作
+const batchLoading = ref('');
 const moveDialogVisible = ref(false);
 const moveTarget = ref(null);
 const sidebarOpen = ref(false);
@@ -175,15 +181,22 @@ function folderDisplayName(f) {
 }
 
 async function loadMailboxes() {
-  const data = await api.get('/mailboxes');
-  mailboxes.value = data.items;
-  mergedUnread.value = data.mergedUnread || 0;
-  if (mergedSelected.value) return;
-  if (!selectedMailboxId.value && data.items.length) {
-    selectMailbox(data.items[0].id);
-  } else if (selectedMailboxId.value) {
-    const cur = data.items.find((m) => m.id === selectedMailboxId.value);
-    if (!cur && data.items.length) selectMailbox(data.items[0].id);
+  sidebarLoading.value = true;
+  try {
+    const data = await api.get('/mailboxes', { loadingLabel: '正在加载邮箱列表…' });
+    mailboxes.value = data.items;
+    mergedUnread.value = data.mergedUnread || 0;
+    if (mergedSelected.value) return;
+    if (!selectedMailboxId.value && data.items.length) {
+      selectMailbox(data.items[0].id);
+    } else if (selectedMailboxId.value) {
+      const cur = data.items.find((m) => m.id === selectedMailboxId.value);
+      if (!cur && data.items.length) selectMailbox(data.items[0].id);
+    }
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  } finally {
+    sidebarLoading.value = false;
   }
 }
 
@@ -210,23 +223,32 @@ function selectMailbox(id) {
 
 async function loadFolders() {
   if (mergedSelected.value || !selectedMailboxId.value) return;
-  const data = await api.get(`/mailboxes/${selectedMailboxId.value}/folders`);
-  folders.value = data.items.filter((f) => f.syncEnabled);
-  const current = folders.value.find((f) => f.id === selectedFolderId.value);
-  if (!current) {
-    const inbox = folders.value.find((f) => f.specialUse === '\\Inbox' || f.path === 'INBOX');
-    const first = inbox || folders.value[0];
-    if (first) {
-      selectFolder(first.id);
-    } else {
-      selectedFolderId.value = null;
-      mails.value = [];
-      total.value = 0;
-      hasMoreOlder.value = false;
-      hasMoreNewer.value = false;
-      currentMail.value = null;
-      selectedIds.value = [];
+  sidebarLoading.value = true;
+  try {
+    const data = await api.get(`/mailboxes/${selectedMailboxId.value}/folders`, {
+      loadingLabel: '正在加载文件夹…',
+    });
+    folders.value = data.items.filter((f) => f.syncEnabled);
+    const current = folders.value.find((f) => f.id === selectedFolderId.value);
+    if (!current) {
+      const inbox = folders.value.find((f) => f.specialUse === '\\Inbox' || f.path === 'INBOX');
+      const first = inbox || folders.value[0];
+      if (first) {
+        selectFolder(first.id);
+      } else {
+        selectedFolderId.value = null;
+        mails.value = [];
+        total.value = 0;
+        hasMoreOlder.value = false;
+        hasMoreNewer.value = false;
+        currentMail.value = null;
+        selectedIds.value = [];
+      }
     }
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  } finally {
+    sidebarLoading.value = false;
   }
 }
 
@@ -337,26 +359,26 @@ async function refreshAll() {
 }
 
 async function syncNow() {
+  if (syncing.value) return;
+  let ids;
   if (mergedSelected.value) {
     if (!mailboxes.value.length) return;
-    syncing.value = true;
-    try {
-      await Promise.all(mailboxes.value.map((mb) => api.post(`/mailboxes/${mb.id}/sync`)));
-      ElMessage.success('已触发全部邮箱同步');
-      setTimeout(refreshAll, 3000);
-    } catch (e) {
-      ElMessage.error(errMsg(e));
-    } finally {
-      syncing.value = false;
-    }
-    return;
+    ids = mailboxes.value.map((mb) => mb.id);
+  } else {
+    if (!selectedMailboxId.value) return;
+    ids = [selectedMailboxId.value];
   }
-  if (!selectedMailboxId.value) return;
   syncing.value = true;
   try {
-    await api.post(`/mailboxes/${selectedMailboxId.value}/sync`);
-    ElMessage.success('同步已触发');
-    setTimeout(refreshAll, 3000);
+    await Promise.all(
+      ids.map((id) => api.post(`/mailboxes/${id}/sync`, null, { loadingLabel: '正在触发同步…' }))
+    );
+    ElMessage.info('同步任务已启动，正在从服务器拉取邮件…');
+    // 后台同步耗时不定，轮询状态直到完成，避免"点了没反应"的卡顿感
+    const done = await pollSyncDone(ids);
+    await refreshAll();
+    if (done) ElMessage.success('同步完成');
+    else ElMessage.warning('同步仍在进行中，已刷新当前结果');
   } catch (e) {
     ElMessage.error(errMsg(e));
   } finally {
@@ -391,27 +413,39 @@ let mailLoadSeq = 0;
 async function loadMailById(id) {
   if (!Number.isInteger(id) || id <= 0) {
     currentMail.value = null;
+    mailLoading.value = false;
     if (route.params.id) router.replace({ name: 'mail' });
     return;
   }
   const seq = ++mailLoadSeq;
+  mailLoading.value = true;
   try {
-    const data = await api.get(`/mails/${id}`);
-    if (seq !== mailLoadSeq || Number(route.params.id) !== id) return;
+    const data = await api.get(`/mails/${id}`, { loadingLabel: '正在加载邮件…' });
+    if (seq !== mailLoadSeq) return;
     currentMail.value = data;
+    mailLoading.value = false;
     if (!data.seen) {
-      await api.patch(`/mails/${id}`, { seen: true });
-      if (seq !== mailLoadSeq) return;
-      data.seen = true;
-      const row = mails.value.find((m) => m.id === id);
-      if (row) row.seen = true;
-      loadFolders();
-      loadMailboxes();
+      // 标记已读会触发后端 IMAP 连接，可能耗时数秒：不阻塞阅读，后台静默同步
+      api
+        .patch(`/mails/${id}`, { seen: true }, { loadingLabel: '正在标记已读…' })
+        .then(() => {
+          if (seq !== mailLoadSeq) return;
+          data.seen = true;
+          const row = mails.value.find((m) => m.id === id);
+          if (row) row.seen = true;
+          loadFolders();
+          loadMailboxes();
+        })
+        .catch(() => {
+          /* 已读状态同步失败不打断阅读 */
+        });
     }
   } catch (e) {
     if (seq !== mailLoadSeq) return;
     ElMessage.error(errMsg(e));
     if (route.params.id) router.replace({ name: 'mail' });
+  } finally {
+    if (seq === mailLoadSeq) mailLoading.value = false;
   }
 }
 
@@ -421,6 +455,7 @@ watch(
     if (id === undefined || id === null || id === '') {
       mailLoadSeq += 1;
       currentMail.value = null;
+      mailLoading.value = false;
       return;
     }
     loadMailById(Number(id));
@@ -428,38 +463,65 @@ watch(
   { immediate: true }
 );
 
+// 批量操作在服务端要逐封连 IMAP，可能返回部分失败的 warnings；统一提示给用户
+function showBatchResult(warnings, successText) {
+  if (Array.isArray(warnings) && warnings.length) {
+    const detail = `${warnings[0]}${warnings.length > 1 ? ` 等 ${warnings.length} 条` : ''}`;
+    ElMessage.warning(`部分操作未同步到邮件服务器：${detail}`);
+  } else {
+    ElMessage.success(successText);
+  }
+}
+
 async function batchSeen(seen) {
+  if (batchLoading.value || !selectedIds.value.length) return;
+  batchLoading.value = seen ? 'seen' : 'unseen';
   try {
-    await api.post('/mails/batch', { ids: [...selectedIds.value], action: seen ? 'seen' : 'unseen' });
-    ElMessage.success('已更新');
+    const data = await api.post(
+      '/mails/batch',
+      { ids: [...selectedIds.value], action: seen ? 'seen' : 'unseen' },
+      { loadingLabel: `正在批量标记${seen ? '已读' : '未读'}（需同步到服务器）…`, timeout: 300000 }
+    );
+    showBatchResult(data.warnings, '已更新');
     selectedIds.value = [];
     await resetMails();
     loadFolders();
     loadMailboxes();
   } catch (e) {
     ElMessage.error(errMsg(e));
+  } finally {
+    batchLoading.value = '';
   }
 }
 
 async function batchMove() {
-  moveDialogVisible.value = false;
+  if (batchLoading.value) return;
+  batchLoading.value = 'move';
   try {
-    await api.post('/mails/batch', {
-      ids: [...selectedIds.value],
-      action: 'move',
-      folderId: moveTarget.value,
-    });
-    ElMessage.success('已移动');
+    const data = await api.post(
+      '/mails/batch',
+      {
+        ids: [...selectedIds.value],
+        action: 'move',
+        folderId: moveTarget.value,
+      },
+      { loadingLabel: '正在移动邮件（需同步到服务器）…', timeout: 300000 }
+    );
+    moveDialogVisible.value = false;
+    showBatchResult(data.warnings, '已移动');
     selectedIds.value = [];
     moveTarget.value = null;
     currentMail.value = null;
     await refreshAll();
   } catch (e) {
     ElMessage.error(errMsg(e));
+  } finally {
+    batchLoading.value = '';
   }
 }
 
 async function batchDelete() {
+  if (batchLoading.value || !selectedIds.value.length) return;
   try {
     await ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 封邮件吗？`, '删除', {
       type: 'warning',
@@ -467,14 +529,21 @@ async function batchDelete() {
   } catch {
     return;
   }
+  batchLoading.value = 'delete';
   try {
-    await api.post('/mails/batch', { ids: [...selectedIds.value], action: 'delete' });
-    ElMessage.success('已删除');
+    const data = await api.post(
+      '/mails/batch',
+      { ids: [...selectedIds.value], action: 'delete' },
+      { loadingLabel: `正在删除 ${selectedIds.value.length} 封邮件（需同步到服务器）…`, timeout: 300000 }
+    );
+    showBatchResult(data.warnings, '已删除');
     selectedIds.value = [];
     currentMail.value = null;
     await refreshAll();
   } catch (e) {
     ElMessage.error(errMsg(e));
+  } finally {
+    batchLoading.value = '';
   }
 }
 
@@ -618,6 +687,9 @@ onMounted(() => {
 <style>
 .mail-drawer .el-drawer__body {
   padding: 0;
+}
+.mail-drawer .drawer-body {
+  height: 100%;
 }
 .mail-drawer .sidebar {
   height: 100%;

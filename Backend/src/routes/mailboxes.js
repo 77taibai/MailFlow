@@ -7,7 +7,7 @@ import { encryptText, signToken, verifyToken } from '../crypto.js';
 import { PROVIDERS, buildAuthRedirect, exchangeCode, getUserEmail, claimsToEmail } from '../services/oauth.js';
 import { testImap } from '../services/imap.js';
 import { verifySmtp } from '../services/smtp.js';
-import { syncOne } from '../services/scheduler.js';
+import { syncOne, syncingIds } from '../services/scheduler.js';
 
 export const mailboxesRouter = Router();
 
@@ -76,6 +76,11 @@ mailboxesRouter.get('/', (req, res) => {
     oauth,
     mergedUnread,
   });
+});
+
+// 供前端轮询：当前正在后台同步的邮箱 id。放在动态 :id 路由之前避免歧义。
+mailboxesRouter.get('/sync-status', (req, res) => {
+  res.json({ ids: syncingIds() });
 });
 
 function validateMailboxPayload(body) {

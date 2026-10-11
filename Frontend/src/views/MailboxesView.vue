@@ -8,7 +8,7 @@
           content="需在 .env 配置 GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET 后启用"
         >
           <span>
-            <el-button type="success" :disabled="!oauth.gmail" @click="oauthStart('gmail')">
+            <el-button type="success" :disabled="!oauth.gmail" :loading="oauthStarting === 'gmail'" @click="oauthStart('gmail')">
               <el-icon><Link /></el-icon>&nbsp;Gmail 授权
             </el-button>
           </span>
@@ -18,7 +18,7 @@
           content="需在 .env 配置 MICROSOFT_CLIENT_ID / MICROSOFT_CLIENT_SECRET 后启用"
         >
           <span>
-            <el-button type="success" :disabled="!oauth.outlook" @click="oauthStart('outlook')">
+            <el-button type="success" :disabled="!oauth.outlook" :loading="oauthStarting === 'outlook'" @click="oauthStart('outlook')">
               <el-icon><Link /></el-icon>&nbsp;Outlook 授权
             </el-button>
           </span>
@@ -76,16 +76,16 @@
       <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
           <div class="row-actions">
-            <el-button size="small" @click="testMailbox(row)">测试</el-button>
-            <el-button size="small" :loading="row._syncing" @click="syncMailbox(row)">同步</el-button>
-            <el-button size="small" type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="removeMailbox(row)">删除</el-button>
+            <el-button size="small" :loading="row._testing" :disabled="row._syncing || row._deleting" @click="testMailbox(row)">测试</el-button>
+            <el-button size="small" :loading="row._syncing" :disabled="row._testing || row._deleting" @click="syncMailbox(row)">同步</el-button>
+            <el-button size="small" type="primary" :disabled="row._testing || row._syncing || row._deleting" @click="openEdit(row)">编辑</el-button>
+            <el-button size="small" type="danger" :loading="row._deleting" :disabled="row._testing || row._syncing" @click="removeMailbox(row)">删除</el-button>
           </div>
         </template>
       </el-table-column>
     </el-table>
 
-    <div v-else class="mobile-mailboxes">
+    <div v-else class="mobile-mailboxes" v-loading="loading">
       <template v-if="!selectedMailbox">
         <el-empty v-if="!mailboxes.length" description="暂无邮箱" />
         <div v-else class="mailbox-list">
@@ -166,10 +166,10 @@
           </div>
         </dl>
         <div class="detail-actions">
-          <el-button @click="testMailbox(selectedMailbox)">测试</el-button>
-          <el-button :loading="selectedMailbox._syncing" @click="syncMailbox(selectedMailbox)">同步</el-button>
-          <el-button type="primary" @click="openEdit(selectedMailbox)">编辑</el-button>
-          <el-button type="danger" @click="removeMailbox(selectedMailbox)">删除</el-button>
+          <el-button :loading="selectedMailbox._testing" :disabled="selectedMailbox._syncing || selectedMailbox._deleting" @click="testMailbox(selectedMailbox)">测试</el-button>
+          <el-button :loading="selectedMailbox._syncing" :disabled="selectedMailbox._testing || selectedMailbox._deleting" @click="syncMailbox(selectedMailbox)">同步</el-button>
+          <el-button type="primary" :disabled="selectedMailbox._testing || selectedMailbox._syncing || selectedMailbox._deleting" @click="openEdit(selectedMailbox)">编辑</el-button>
+          <el-button type="danger" :loading="selectedMailbox._deleting" :disabled="selectedMailbox._testing || selectedMailbox._syncing" @click="removeMailbox(selectedMailbox)">删除</el-button>
         </div>
       </template>
     </div>
@@ -183,7 +183,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus, Link, ArrowLeft } from '@element-plus/icons-vue';
-import api, { errMsg } from '../api.js';
+import api, { errMsg, pollSyncDone } from '../api.js';
 import { formatDateTime } from '../utils.js';
 import { useIsMobile } from '../composables/useIsMobile.js';
 import MailboxFormDialog from '../components/MailboxFormDialog.vue';
@@ -191,6 +191,7 @@ import MailboxFormDialog from '../components/MailboxFormDialog.vue';
 const route = useRoute();
 const mailboxes = ref([]);
 const oauth = reactive({ gmail: false, outlook: false });
+const oauthStarting = ref('');
 const loading = ref(false);
 const formRef = ref();
 const isMobile = useIsMobile();
@@ -205,8 +206,13 @@ function providerLabel(p) {
 async function load() {
   loading.value = true;
   try {
-    const data = await api.get('/mailboxes');
-    mailboxes.value = data.items.map((m) => ({ ...m, _syncing: false }));
+    const data = await api.get('/mailboxes', { loadingLabel: '正在加载邮箱列表…' });
+    mailboxes.value = data.items.map((m) => ({
+      ...m,
+      _syncing: false,
+      _testing: false,
+      _deleting: false,
+    }));
     if (selectedMailbox.value) {
       selectedMailbox.value =
         mailboxes.value.find((m) => m.id === selectedMailbox.value.id) || null;
@@ -229,18 +235,27 @@ function openEdit(row) {
 }
 
 async function oauthStart(provider) {
+  oauthStarting.value = provider;
   try {
-    const data = await api.get(`/mailboxes/oauth/${provider}/start`);
+    const data = await api.get(`/mailboxes/oauth/${provider}/start`, {
+      loadingLabel: '正在发起 OAuth 授权…',
+    });
     window.location.href = data.url;
   } catch (e) {
     ElMessage.error(errMsg(e));
+    oauthStarting.value = '';
   }
 }
 
 async function testMailbox(row) {
-  loading.value = true;
+  if (row._testing || row._syncing || row._deleting) return;
+  row._testing = true;
   try {
-    const data = await api.post(`/mailboxes/${row.id}/test`);
+    // IMAP + SMTP 串行连接，慢服务商下可能长达一分钟，放宽超时并给出明确提示
+    const data = await api.post(`/mailboxes/${row.id}/test`, null, {
+      timeout: 180000,
+      loadingLabel: `正在测试「${row.name}」的连接，最长约需 1 分钟…`,
+    });
     if (data.imap.ok && data.smtp.ok) ElMessage.success('IMAP / SMTP 连接正常');
     else {
       if (!data.imap.ok) ElMessage.error(`IMAP 失败: ${data.imap.error}`);
@@ -250,16 +265,20 @@ async function testMailbox(row) {
   } catch (e) {
     ElMessage.error(errMsg(e));
   } finally {
-    loading.value = false;
+    row._testing = false;
   }
 }
 
 async function syncMailbox(row) {
+  if (row._syncing) return;
   row._syncing = true;
   try {
-    await api.post(`/mailboxes/${row.id}/sync`);
-    ElMessage.success('同步已触发');
-    setTimeout(load, 3000);
+    await api.post(`/mailboxes/${row.id}/sync`, null, { loadingLabel: '正在触发同步…' });
+    ElMessage.info('同步任务已启动，正在从服务器拉取邮件…');
+    const done = await pollSyncDone([row.id]);
+    await load();
+    if (done) ElMessage.success(`「${row.name}」同步完成`);
+    else ElMessage.warning('同步仍在进行中，稍后可刷新查看');
   } catch (e) {
     ElMessage.error(errMsg(e));
   } finally {
@@ -268,6 +287,7 @@ async function syncMailbox(row) {
 }
 
 async function removeMailbox(row) {
+  if (row._deleting || row._syncing || row._testing) return;
   try {
     await ElMessageBox.confirm(
       `确定删除邮箱「${row.name}」吗？其所有本地邮件与附件都会被删除。`,
@@ -277,12 +297,15 @@ async function removeMailbox(row) {
   } catch {
     return;
   }
+  row._deleting = true;
   try {
-    await api.delete(`/mailboxes/${row.id}`);
+    await api.delete(`/mailboxes/${row.id}`, { loadingLabel: '正在删除邮箱及其邮件…' });
     ElMessage.success('已删除');
+    if (selectedMailbox.value && selectedMailbox.value.id === row.id) selectedMailbox.value = null;
     load();
   } catch (e) {
     ElMessage.error(errMsg(e));
+    row._deleting = false;
   }
 }
 

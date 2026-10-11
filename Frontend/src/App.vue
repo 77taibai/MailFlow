@@ -1,6 +1,11 @@
 <template>
   <router-view />
+  <global-loading-bar />
 </template>
+
+<script setup>
+import GlobalLoadingBar from './components/GlobalLoadingBar.vue';
+</script>
 
 <style>
 *,

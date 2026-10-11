@@ -1,21 +1,21 @@
 <template>
-  <div class="reader">
+  <div class="reader" v-loading="!!readerBusy" :element-loading-text="readerBusyText">
     <template v-if="mail">
       <div class="reader-header">
         <div class="subject-line">
           <h3 class="subject">{{ mail.subject || '(无主题)' }}</h3>
           <div class="actions">
             <el-tooltip content="回复">
-              <el-button :icon="EditPen" text @click="$emit('reply', mail)" />
+              <el-button :icon="EditPen" text :disabled="!!readerBusy" @click="$emit('reply', mail)" />
             </el-tooltip>
             <el-tooltip content="分享">
-              <el-button :icon="Share" text @click="shareMail" />
+              <el-button :icon="Share" text :loading="readerBusy === 'share'" :disabled="!!readerBusy && readerBusy !== 'share'" @click="shareMail" />
             </el-tooltip>
             <el-tooltip :content="mail.seen ? '标记未读' : '标记已读'">
-              <el-button :icon="mail.seen ? View : Hide" text @click="toggleSeen" />
+              <el-button :icon="mail.seen ? View : Hide" text :loading="readerBusy === 'seen'" :disabled="!!readerBusy && readerBusy !== 'seen'" @click="toggleSeen" />
             </el-tooltip>
             <el-tooltip content="删除">
-              <el-button :icon="Delete" text type="danger" @click="deleteMail" />
+              <el-button :icon="Delete" text type="danger" :loading="readerBusy === 'delete'" :disabled="!!readerBusy && readerBusy !== 'delete'" @click="deleteMail" />
             </el-tooltip>
           </div>
         </div>
@@ -43,7 +43,8 @@
               class="att-tag"
               @click="download(att)"
             >
-              <el-icon><Paperclip /></el-icon>
+              <el-icon class="is-loading" v-if="downloadingIds.includes(att.id)"><Loading /></el-icon>
+              <el-icon v-else><Paperclip /></el-icon>
               {{ att.filename }} ({{ formatBytes(att.size) }})
             </el-tag>
           </div>
@@ -64,7 +65,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { EditPen, Delete, View, Hide, Share } from '@element-plus/icons-vue';
 import api, { downloadToBlob, errMsg } from '../api.js';
@@ -76,51 +77,100 @@ const props = defineProps({
 
 const emit = defineEmits(['refresh', 'reply', 'deleted']);
 
-async function toggleSeen() {
+// '' | 'seen' | 'delete' | 'share'
+const readerBusy = ref('');
+const readerBusyText = ref('');
+// 正在下载的附件 id 集合
+const downloadingIds = ref(new Set());
+
+async function runBusy(key, text, fn) {
+  if (readerBusy.value) return;
+  readerBusy.value = key;
+  readerBusyText.value = text;
   try {
-    await api.patch(`/mails/${props.mail.id}`, { seen: !props.mail.seen });
-    props.mail.seen = !props.mail.seen;
-    emit('refresh');
-  } catch (e) {
-    ElMessage.error(errMsg(e));
+    await fn();
+  } finally {
+    readerBusy.value = '';
+    readerBusyText.value = '';
   }
 }
 
+async function toggleSeen() {
+  const next = !props.mail.seen;
+  await runBusy('seen', next ? '正在标记已读…' : '正在标记未读…', async () => {
+    try {
+      const data = await api.patch(
+        `/mails/${props.mail.id}`,
+        { seen: next },
+        { loadingLabel: '正在同步已读状态到服务器…', timeout: 120000 }
+      );
+      props.mail.seen = next;
+      emit('refresh');
+      if (data && data.warning) ElMessage.warning(`本地已更新，服务器同步失败：${data.warning}`);
+    } catch (e) {
+      ElMessage.error(errMsg(e));
+    }
+  });
+}
+
 async function deleteMail() {
+  if (readerBusy.value) return;
   try {
     await ElMessageBox.confirm('确定删除这封邮件吗？', '删除', { type: 'warning' });
   } catch {
     return;
   }
-  try {
-    await api.post('/mails/batch', { ids: [props.mail.id], action: 'delete' });
-    ElMessage.success('已删除');
-    emit('deleted');
-  } catch (e) {
-    ElMessage.error(errMsg(e));
-  }
+  await runBusy('delete', '正在删除邮件…', async () => {
+    try {
+      const data = await api.post(
+        '/mails/batch',
+        { ids: [props.mail.id], action: 'delete' },
+        { loadingLabel: '正在删除邮件并同步到服务器…', timeout: 120000 }
+      );
+      if (Array.isArray(data.warnings) && data.warnings.length) {
+        ElMessage.warning(`已本地删除，服务器同步失败：${data.warnings[0]}`);
+      } else {
+        ElMessage.success('已删除');
+      }
+      emit('deleted');
+    } catch (e) {
+      ElMessage.error(errMsg(e));
+    }
+  });
 }
 
 async function shareMail() {
-  try {
-    const data = await api.post(`/mails/${props.mail.id}/share`);
-    const url = new URL(data.path, window.location.origin).href;
+  await runBusy('share', '正在生成分享链接…', async () => {
     try {
-      await navigator.clipboard.writeText(url);
-      ElMessage.success('分享链接已复制');
-    } catch {
-      await ElMessageBox.alert(url, '分享链接', { confirmButtonText: '关闭' });
+      const data = await api.post(`/mails/${props.mail.id}/share`, null, {
+        loadingLabel: '正在生成分享链接…',
+      });
+      const url = new URL(data.path, window.location.origin).href;
+      try {
+        await navigator.clipboard.writeText(url);
+        ElMessage.success('分享链接已复制');
+      } catch {
+        await ElMessageBox.alert(url, '分享链接', { confirmButtonText: '关闭' });
+      }
+    } catch (e) {
+      ElMessage.error(errMsg(e));
     }
-  } catch (e) {
-    ElMessage.error(errMsg(e));
-  }
+  });
 }
 
 async function download(att) {
+  if (downloadingIds.value.has(att.id)) return;
+  const set = new Set(downloadingIds.value);
+  set.add(att.id);
+  downloadingIds.value = set;
   try {
     await downloadToBlob(`/mails/${props.mail.id}/attachments/${att.id}`, att.filename);
   } catch (e) {
     ElMessage.error(errMsg(e));
+  } finally {
+    const done = new Set(downloadingIds.value);
+    done.delete(att.id);
+    downloadingIds.value = done;
   }
 }
 

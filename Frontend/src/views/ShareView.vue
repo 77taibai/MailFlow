@@ -5,7 +5,13 @@
       <span>MailFlow 分享</span>
     </header>
 
-    <div v-if="loading" class="share-state">加载中…</div>
+    <div v-if="loading" class="share-state">
+      <div class="share-loading">
+        <el-icon class="is-loading share-spinner" :size="28"><Loading /></el-icon>
+        <div class="share-loading-text">正在加载邮件，请稍候…</div>
+        <el-skeleton class="share-skeleton" animated :rows="5" />
+      </div>
+    </div>
     <el-empty v-else-if="error" class="share-state" :description="error" />
 
     <div v-else-if="mail" class="share-reader">
@@ -50,6 +56,7 @@
 <script setup>
 import { ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { Loading } from '@element-plus/icons-vue';
 import { shareApi } from '../api.js';
 import { formatDateTime, formatBytes } from '../utils.js';
 
@@ -113,6 +120,23 @@ function download(att) {
   justify-content: center;
   color: #909399;
   padding: 40px 16px;
+}
+.share-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(560px, 90%);
+}
+.share-spinner {
+  color: #409eff;
+}
+.share-loading-text {
+  font-size: 14px;
+  color: #606266;
+}
+.share-skeleton {
+  width: 100%;
 }
 .share-reader {
   flex: 1;

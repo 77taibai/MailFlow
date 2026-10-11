@@ -9,6 +9,11 @@ export function globalSyncIntervalSec() {
   return config.syncIntervalSec;
 }
 
+/** 当前正在后台同步的邮箱 id 列表，供前端轮询同步进度 */
+export function syncingIds() {
+  return [...syncing];
+}
+
 export function syncOne(mailboxId) {
   if (syncing.has(mailboxId)) return false;
   syncing.add(mailboxId);

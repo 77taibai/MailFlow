@@ -247,15 +247,23 @@ async function test() {
   if (err) return ElMessage.warning(err);
   testing.value = true;
   try {
+    const testConfig = {
+      timeout: 180000,
+      loadingLabel: '正在测试服务器连接，最长约需 1 分钟…',
+    };
     let data;
     if (editing.value) {
-      data = await api.post(`/mailboxes/${editing.value.id}/test`);
+      data = await api.post(`/mailboxes/${editing.value.id}/test`, null, testConfig);
     } else {
-      data = await api.post('/mailboxes/test', {
-        ...form,
-        provider: 'custom',
-        authType: 'password',
-      });
+      data = await api.post(
+        '/mailboxes/test',
+        {
+          ...form,
+          provider: 'custom',
+          authType: 'password',
+        },
+        testConfig
+      );
     }
     if (data.imap.ok && data.smtp.ok) ElMessage.success('IMAP / SMTP 连接正常');
     else {

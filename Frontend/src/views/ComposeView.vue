@@ -1,9 +1,9 @@
 <template>
-  <div class="page">
+  <div class="page" v-loading="initLoading" element-loading-text="正在加载…">
     <h2 class="page-title">撰写邮件</h2>
 
     <el-alert
-      v-if="!mailboxes.length"
+      v-if="!initLoading && !mailboxes.length"
       title="还没有可用的发件邮箱，请先到邮箱管理添加"
       type="warning"
       show-icon
@@ -55,16 +55,16 @@
     </el-form>
 
     <div class="form-actions">
-      <el-button @click="cancel">取消</el-button>
-      <el-button type="primary" :loading="sending" :disabled="!mailboxes.length" @click="send">
-        发送
+      <el-button :disabled="sending || initLoading" @click="cancel">取消</el-button>
+      <el-button type="primary" :loading="sending" :disabled="!mailboxes.length || initLoading" @click="send">
+        {{ sending ? sendProgressText : '发送' }}
       </el-button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { Paperclip } from '@element-plus/icons-vue';
@@ -78,6 +78,15 @@ const router = useRouter();
 const isMobile = useIsMobile();
 const mailboxes = ref([]);
 const sending = ref(false);
+const initLoading = ref(false);
+const uploadPercent = ref(0);
+const sendStage = ref(''); // 'uploading' | 'sending'
+const sendProgressText = computed(() => {
+  if (sendStage.value === 'uploading' && uploadPercent.value > 0) {
+    return uploadPercent.value < 100 ? `上传附件 ${uploadPercent.value}%` : '发送中…';
+  }
+  return '发送中…';
+});
 const fileList = ref([]);
 const editorRef = ref();
 const form = reactive({ mailboxId: null, to: [], cc: [], subject: '', html: '', inReplyTo: '', references: [] });
@@ -114,7 +123,7 @@ function selectMailbox(id) {
 
 async function loadMailboxes() {
   try {
-    const data = await api.get('/mailboxes');
+    const data = await api.get('/mailboxes', { loadingLabel: '正在加载发件邮箱…' });
     mailboxes.value = data.items || [];
     const preferred = Number(route.query.mailbox);
     if (!selectMailbox(preferred) && mailboxes.value.length) {
@@ -127,7 +136,7 @@ async function loadMailboxes() {
 
 async function loadReply(id) {
   try {
-    const mail = await api.get(`/mails/${id}`);
+    const mail = await api.get(`/mails/${id}`, { loadingLabel: '正在加载原邮件…' });
     if (mail.mailboxId) selectMailbox(mail.mailboxId);
     const replyTarget = mail.replyToAddr || mail.fromAddr;
     form.to = replyTarget ? [replyTarget] : [];
@@ -150,6 +159,8 @@ async function send() {
   if (!form.mailboxId) return ElMessage.warning('请选择发件邮箱');
   if (!form.to.length) return ElMessage.warning('请填写收件人');
   sending.value = true;
+  uploadPercent.value = 0;
+  sendStage.value = fileList.value.length ? 'uploading' : 'sending';
   try {
     const fd = new FormData();
     fd.append('mailboxId', form.mailboxId);
@@ -163,19 +174,35 @@ async function send() {
     for (const f of fileList.value) {
       fd.append('attachments', f.raw);
     }
-    await api.post('/mails/send', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    await api.post('/mails/send', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      loadingLabel: '正在发送邮件…',
+      // SMTP 外发可能较慢，附件大时上传 + 投递合计可能几分钟
+      timeout: 300000,
+      onUploadProgress: (e) => {
+        if (e.total) uploadPercent.value = Math.round((e.loaded * 100) / e.total);
+        if (uploadPercent.value >= 100) sendStage.value = 'sending';
+      },
+    });
     ElMessage.success('发送成功');
     router.push('/');
   } catch (e) {
     ElMessage.error(errMsg(e));
   } finally {
     sending.value = false;
+    uploadPercent.value = 0;
+    sendStage.value = '';
   }
 }
 
 onMounted(async () => {
-  await loadMailboxes();
-  if (route.query.reply) await loadReply(route.query.reply);
+  initLoading.value = true;
+  try {
+    await loadMailboxes();
+    if (route.query.reply) await loadReply(route.query.reply);
+  } finally {
+    initLoading.value = false;
+  }
 });
 </script>
 
