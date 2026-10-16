@@ -188,6 +188,41 @@ mailsRouter.post('/:id/share', (req, res) => {
   });
 });
 
+async function syncSeenToImap(rows, seen) {
+  const warnings = [];
+  const byFolder = new Map();
+  for (const row of rows) {
+    if (!row.uid) continue;
+    if (!byFolder.has(row.folder_id)) byFolder.set(row.folder_id, []);
+    byFolder.get(row.folder_id).push(row);
+  }
+  for (const [folderIdKey, mails] of byFolder) {
+    const folder = getFolder(folderIdKey);
+    const mailbox = folder ? getMailbox(folder.mailbox_id) : null;
+    if (!folder || !mailbox) continue;
+    let client;
+    try {
+      client = await openConnection(mailbox);
+      await client.mailboxOpen(folder.path);
+      const uids = mails.map((m) => m.uid);
+      if (seen) await client.messageFlagsAdd(uids, ['\\Seen'], { uid: true });
+      else await client.messageFlagsRemove(uids, ['\\Seen'], { uid: true });
+    } catch (err) {
+      warnings.push(err.message);
+    } finally {
+      if (client) {
+        try {
+          if (client.usable) await client.logout();
+          else client.close();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+  return warnings;
+}
+
 async function applySeenOnImap(mailbox, folder, uid, seen) {
   let client;
   try {
@@ -227,6 +262,38 @@ mailsRouter.patch('/:id', async (req, res) => {
   res.json({ ok: true, warning });
 });
 
+mailsRouter.post('/seen-all', async (req, res) => {
+  const { mailboxId, folderId, scope } = req.body || {};
+  const isMerged = scope === 'merged-inbox';
+  const where = ['m.seen = 0'];
+  const params = [];
+
+  if (isMerged) {
+    where.push("(f.special_use = '\\Inbox' OR f.path = 'INBOX')");
+  } else {
+    if (!mailboxId) return res.status(400).json({ error: '缺少 mailboxId' });
+    where.push('m.mailbox_id = ?');
+    params.push(Number(mailboxId));
+    if (folderId) {
+      where.push('m.folder_id = ?');
+      params.push(Number(folderId));
+    }
+  }
+
+  const join = isMerged ? 'JOIN folders f ON f.id = m.folder_id' : '';
+  const rows = db
+    .prepare(`SELECT m.id, m.uid, m.folder_id FROM mails m ${join} WHERE ${where.join(' AND ')}`)
+    .all(...params);
+
+  if (!rows.length) return res.json({ ok: true, updated: 0, warnings: [] });
+
+  const placeholders = rows.map(() => '?').join(',');
+  db.prepare(`UPDATE mails SET seen = 1 WHERE id IN (${placeholders})`).run(...rows.map((r) => r.id));
+
+  const warnings = await syncSeenToImap(rows, true);
+  res.json({ ok: true, updated: rows.length, warnings });
+});
+
 mailsRouter.post('/batch', async (req, res) => {
   const { ids, action, folderId, permanent } = req.body || {};
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids 不能为空' });
@@ -245,35 +312,7 @@ mailsRouter.post('/batch', async (req, res) => {
     const rows = db
       .prepare(`SELECT * FROM mails WHERE id IN (${placeholders}) AND uid IS NOT NULL`)
       .all(...mailIds);
-    const byFolder = new Map();
-    for (const row of rows) {
-      if (!byFolder.has(row.folder_id)) byFolder.set(row.folder_id, []);
-      byFolder.get(row.folder_id).push(row);
-    }
-    for (const [folderIdKey, mails] of byFolder) {
-      const folder = getFolder(folderIdKey);
-      const mailbox = folder ? getMailbox(folder.mailbox_id) : null;
-      if (!folder || !mailbox) continue;
-      let client;
-      try {
-        client = await openConnection(mailbox);
-        await client.mailboxOpen(folder.path);
-        const uids = mails.map((m) => m.uid);
-        if (seen) await client.messageFlagsAdd(uids, ['\\Seen'], { uid: true });
-        else await client.messageFlagsRemove(uids, ['\\Seen'], { uid: true });
-      } catch (err) {
-        warnings.push(err.message);
-      } finally {
-        if (client) {
-          try {
-            if (client.usable) await client.logout();
-            else client.close();
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-    }
+    warnings.push(...(await syncSeenToImap(rows, seen)));
     return res.json({ ok: true, warnings });
   }
 

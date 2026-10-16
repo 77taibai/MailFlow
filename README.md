@@ -9,7 +9,7 @@
 - **多邮箱同步**：IMAP 增量同步，按 UID 追踪游标，感知 `UIDVALIDITY` 变化自动重建；首次同步回填每文件夹最新 N 封（默认 50）。
 - **任意 IMAP/SMTP 邮箱**：表单手填服务器与授权码，保存前可测试 IMAP 登录 + SMTP 连通。
 - **Gmail / Outlook 一键授权**：OAuth2 全链路（IMAP + SMTP 双通道），服务器地址、账号、凭据自动生成，无需手填；access token 到期前自动用 refresh token 刷新。
-- **邮件收发**：滚动自动加载（向下续载更早、向上续载更新）、正文沙箱渲染、附件下载、批量已读/未读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill，正文编辑器支持全屏编辑）、标签式收件人/抄送输入（空格/逗号/分号分隔，粘贴可批量拆分、标签可就地编辑）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。接收侧规范解析并展示 `Sender` / `Reply-To` / `References` 等标准头，发送侧自动生成 `Date` / `Message-ID` 并支持 `Reply-To` / `In-Reply-To` / `References`，回复时自动写线程链；发件 `From` 支持按邮箱配置**发件人显示名**（`mailboxes.sender_name`，留空则收件人只看到邮箱地址）；对缺失/畸形/非标头做防御式降级，保证邮件仍可入库。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
+- **邮件收发**：滚动自动加载（向下续载更早、向上续载更新）、正文沙箱渲染、附件下载、批量已读/未读、一键全部已读、移动、删除（按 Trash 规则，支持强制永久删）、富文本撰写（Quill，正文编辑器支持全屏编辑）、标签式收件人/抄送输入（空格/逗号/分号分隔，粘贴可批量拆分、标签可就地编辑）与 multipart 发送（同时生成纯文本备选；附件 ≤10 个 / 单个 ≤25MB）。接收侧规范解析并展示 `Sender` / `Reply-To` / `References` 等标准头，发送侧自动生成 `Date` / `Message-ID` 并支持 `Reply-To` / `In-Reply-To` / `References`，回复时自动写线程链；发件 `From` 支持按邮箱配置**发件人显示名**（`mailboxes.sender_name`，留空则收件人只看到邮箱地址）；对缺失/畸形/非标头做防御式降级，保证邮件仍可入库。左侧提供虚拟**合并账户**（默认进入），按时间聚合所有邮箱的收件箱（其它文件夹不聚合），并在列表中标注来源邮箱。
 - **登录**：单用户密码登录与自有 OIDC 单点登录二选一，JWT 会话（默认 7 天），登录接口内存限速 10 次/分钟/IP。
 - **邮件地址化浏览**：打开某封邮件时地址栏变为 `/mail/<id>`，可复制该地址直达或刷新后仍停在该邮件；合并账户下点击邮件不会把左侧邮箱切换成该邮件所属邮箱。
 - **免登录分享**：登录后可为某封邮件生成带签名密钥的分享链接（`/share/<token>`）。收件人无需登录即可查看该封邮件正文与该邮件附件，看不到其它邮件、也不能改动任何设置；分享令牌与登录令牌密钥隔离、类型互斥，不能互相冒用。密钥生成与令牌格式见下文「免登录分享」。
@@ -200,6 +200,7 @@ OAuth 邮箱的编辑界面只开放名称、发件人名称、同步间隔、�
 | GET | `/api/mails/:id/attachments/:attachmentId` | 附件流式下载 |
 | POST | `/api/mails/:id/share` | 生成该邮件的免登录分享链接，返回 `{ token, path, expiresAt }` |
 | PATCH | `/api/mails/:id` | 改已读状态 |
+| POST | `/api/mails/seen-all` | 一键全部已读。body 传 `mailboxId`（可选 `folderId`）限定范围，或用 `scope=merged-inbox` 覆盖合并账户收件箱；返回 `{ updated, warnings }` |
 | POST | `/api/mails/batch` | 批量 `seen` / `unseen` / `move` / `delete`（`permanent` 强制永久删） |
 | POST | `/api/mails/send` | multipart 发送（`to`/`cc`/`subject`/`text`/`html` + 附件，附件最多 10 个、单个 25MB；仅传 `html` 时后端自动生成纯文本备选）。可选 `replyTo`/`inReplyTo`/`references`（JSON 数组字符串或空白分隔）/`sender`；`Date` 与 `Message-ID` 未提供时自动生成 |
 

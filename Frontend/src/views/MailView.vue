@@ -24,17 +24,30 @@
         </el-button>
       </div>
       <div class="list-toolbar">
-        <el-button :icon="Refresh" size="small" :loading="syncing" :disabled="!selectedMailboxId && !mergedSelected" @click="syncNow">
-          同步
-        </el-button>
-        <el-button size="small" :loading="batchLoading === 'seen'" :disabled="!selectedIds.length || !!batchLoading" @click="batchSeen(true)">标记已读</el-button>
-        <el-button size="small" :loading="batchLoading === 'unseen'" :disabled="!selectedIds.length || !!batchLoading" @click="batchSeen(false)">标记未读</el-button>
-        <el-button size="small" :disabled="!selectedIds.length || mergedSelected || !!batchLoading" @click="moveDialogVisible = true">移动</el-button>
-        <el-button size="small" type="danger" :loading="batchLoading === 'delete'" :disabled="!selectedIds.length || !!batchLoading" @click="batchDelete">删除</el-button>
-        <div class="spacer"></div>
-        <el-button class="compose-btn" type="primary" :icon="EditPen" size="small" :disabled="!mailboxes.length" @click="openCompose">
-          撰写
-        </el-button>
+        <div class="toolbar-row toolbar-top">
+          <el-button :icon="Refresh" size="small" :loading="syncing" :disabled="!selectedMailboxId && !mergedSelected" @click="syncNow">
+            同步
+          </el-button>
+          <el-button
+            v-if="!hasSelection"
+            size="small"
+            :loading="batchLoading === 'seen-all'"
+            :disabled="(!mergedSelected && !selectedMailboxId) || !!batchLoading"
+            @click="batchSeenAll"
+          >
+            全部已读
+          </el-button>
+          <div class="spacer"></div>
+          <el-button class="compose-btn" type="primary" :icon="EditPen" size="small" :disabled="!mailboxes.length" @click="openCompose">
+            撰写
+          </el-button>
+        </div>
+        <div v-if="hasSelection" class="toolbar-row toolbar-actions">
+          <el-button size="small" :loading="batchLoading === 'seen'" :disabled="!!batchLoading" @click="batchSeen(true)">标记已读</el-button>
+          <el-button size="small" :loading="batchLoading === 'unseen'" :disabled="!!batchLoading" @click="batchSeen(false)">标记未读</el-button>
+          <el-button size="small" :disabled="mergedSelected || !!batchLoading" @click="moveDialogVisible = true">移动</el-button>
+          <el-button size="small" type="danger" :loading="batchLoading === 'delete'" :disabled="!!batchLoading" @click="batchDelete">删除</el-button>
+        </div>
       </div>
 
       <mail-list
@@ -158,6 +171,9 @@ const batchLoading = ref('');
 const moveDialogVisible = ref(false);
 const moveTarget = ref(null);
 const sidebarOpen = ref(false);
+
+// 多选状态：勾选了邮件。多选专用操作（已读/未读/移动/删除）仅在此状态下出现
+const hasSelection = computed(() => selectedIds.value.length > 0);
 
 watch(isMobile, (mobile) => {
   if (!mobile) sidebarOpen.value = false;
@@ -494,6 +510,41 @@ async function batchSeen(seen) {
   }
 }
 
+async function batchSeenAll() {
+  if (batchLoading.value) return;
+  if (!mergedSelected.value && !selectedMailboxId.value) return;
+  try {
+    await ElMessageBox.confirm('确定将当前列表中的全部未读邮件标记为已读吗？', '全部已读', {
+      type: 'warning',
+    });
+  } catch {
+    return;
+  }
+  batchLoading.value = 'seen-all';
+  try {
+    const payload = mergedSelected.value
+      ? { scope: 'merged-inbox' }
+      : { mailboxId: selectedMailboxId.value, folderId: selectedFolderId.value };
+    const data = await api.post('/mails/seen-all', payload, {
+      loadingLabel: '正在标记全部已读（需同步到服务器）…',
+      timeout: 300000,
+    });
+    if (!data.updated) {
+      ElMessage.info('没有未读邮件');
+    } else {
+      showBatchResult(data.warnings, '已全部标记为已读');
+    }
+    selectedIds.value = [];
+    await resetMails();
+    loadFolders();
+    loadMailboxes();
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+  } finally {
+    batchLoading.value = '';
+  }
+}
+
 async function batchMove() {
   if (batchLoading.value) return;
   batchLoading.value = 'move';
@@ -639,11 +690,24 @@ onMounted(() => {
 }
 .list-toolbar {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
   padding: 8px;
   border-bottom: 1px solid #e4e7ed;
-  flex-wrap: wrap;
+}
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Element Plus 相邻按钮自带 margin-left，与 gap 叠加会造成间距忽大忽小 */
+.list-toolbar .el-button + .el-button {
+  margin-left: 0;
+}
+/* 批量操作等宽平铺，视觉整齐 */
+.toolbar-actions > .el-button {
+  flex: 1 1 0;
+  min-width: 0;
 }
 .spacer {
   flex: 1;
@@ -664,14 +728,19 @@ onMounted(() => {
     width: 100%;
   }
   .list-toolbar {
+    flex-direction: row;
     flex-wrap: nowrap;
     gap: 4px;
     padding: 8px 6px;
   }
-  .list-toolbar > .spacer {
+  /* 窄屏摊平两行包裹，恢复原单行等分布局 */
+  .toolbar-row {
+    display: contents;
+  }
+  .list-toolbar .spacer {
     display: none;
   }
-  .list-toolbar > .el-button {
+  .list-toolbar .el-button {
     --el-button-size: 32px;
     flex: 1 1 0;
     min-width: 0;

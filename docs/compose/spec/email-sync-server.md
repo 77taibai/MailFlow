@@ -85,7 +85,7 @@ commits: e41abc0..d8c3b01
 
 - 列表 `GET /api/mails?mailboxId&folder&seen&page&pageSize`：分页（默认 20，按 date desc），返回摘要字段。虚拟合并账户用 `scope=merged-inbox`（无需 mailboxId）：`mails JOIN folders`，仅取 `special_use='\Inbox' OR path='INBOX'`，跨邮箱按 date desc 合并分页，附 `mailbox_name`；`GET /api/mailboxes` 额外返回 `mergedUnread` 供角标。
 - 详情 `GET /api/mails/:id`：body_html 在前端用 `sandbox="allow-popups allow-popups-to-escape-sandbox"`（无 allow-scripts/allow-same-origin）iframe + `srcdoc` 渲染，防脚本执行；正文链接统一改写为 `target="_blank"` + `rel="noopener noreferrer"` 并注入 `<base target="_blank">` 兜底，点击在新标签打开，不在 iframe 内导航。
-- 已读/未读：单个与批量 PATCH；同时 IMAP `messageFlagsAdd/Remove \Seen`（失败不影响本地状态，返回 warning）。
+- 已读/未读：单个与批量 PATCH；同时 IMAP `messageFlagsAdd/Remove \Seen`（失败不影响本地状态，返回 warning）。一键全部已读 `POST /api/mails/seen-all`：body 传 `mailboxId`（可选 `folderId`）限定范围，或 `scope=merged-inbox` 覆盖合并账户收件箱，仅取未读并批量置 `seen=1`，再按文件夹聚合同步 IMAP，返回 `{ updated, warnings }`。
 - 移动：本地改 folder_id + IMAP `messageMove`；删除：有 `\Trash` specialUse folder 则移入，否则本地+服务端永久删除；`permanent=1` 直接永久删（本地记录与附件一并清）。
 - 附件：`GET /api/mails/:id/attachments/:attachmentId` 鉴权后从磁盘流式下载，Content-Disposition 编码文件名。
 
@@ -107,7 +107,7 @@ commits: e41abc0..d8c3b01
 ### 前端页面
 
 - `/login`：密码表单（仅密码，无用户名）+ （若启用）OIDC 按钮；`/oidc-callback` 读 hash 存 token。
-- `/`：三栏邮件台 —— 左：邮箱与文件夹树（仅显示已开启同步的文件夹；含未读数、管理入口；顶部“合并账户”聚合各邮箱收件箱，默认进入）；中：邮件列表（勾选批量、未读加粗、附件图标、合并时标注来源邮箱）；右：阅读窗（详情 iframe、附件下载、已读/未读/移动/删除/回复）；撰写对话框正文用 Quill 富文本（加粗/斜体/列表/链接等），回复时以引用块预填纯文本内容。合并账户下“移动”不可用，“同步”触发全部邮箱。
+- `/`：三栏邮件台 —— 左：邮箱与文件夹树（仅显示已开启同步的文件夹；含未读数、管理入口；顶部“合并账户”聚合各邮箱收件箱，默认进入）；中：邮件列表（勾选批量、一键全部已读、未读加粗、附件图标、合并时标注来源邮箱）；右：阅读窗（详情 iframe、附件下载、已读/未读/移动/删除/回复）；撰写对话框正文用 Quill 富文本（加粗/斜体/列表/链接等），回复时以引用块预填纯文本内容。合并账户下“移动”不可用，“同步”触发全部邮箱。
 - `/mailboxes`：邮箱 CRUD、连接测试、立即同步、Gmail/Outlook OAuth 授权按钮、每邮箱钉钉开关与关键词、文件夹同步开关（在「编辑邮箱」弹窗内的「文件夹同步」区块）。
 - 无 `/settings` 页面：钉钉推送与全局同步间隔只在 `.env` 中配置，重启后端生效。
 - axios 拦截 401 → 清 token 回登录页；写信任 localStorage token。
