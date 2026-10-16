@@ -153,6 +153,10 @@ defineExpose({ getText });
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
   background: #fafafa;
+  /* 外层 el-form-item__content 的 line-height:32px 会继承进工具栏，
+     抬高 .ql-picker-label 的行盒基线，使“Normal”等文字比右侧图标偏下；
+     重置为 normal 以还原 Quill 默认的垂直居中 */
+  line-height: normal;
 }
 .rich-editor :deep(.ql-toolbar .ql-formats) {
   margin-right: 0;

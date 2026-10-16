@@ -133,6 +133,8 @@ function folderDisplayName(f) {
   background: #f7f8fa;
   overflow: hidden;
   height: 100%;
+  /* 列表为点击导航，禁止文字被选中 */
+  user-select: none;
 }
 .brand {
   display: flex;

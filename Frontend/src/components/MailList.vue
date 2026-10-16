@@ -104,6 +104,8 @@ defineExpose({ getScrollInfo, restoreScroll, scrollToTop });
 <style scoped>
 .mail-list {
   flex: 1;
+  /* 列表为点击导航，禁止文字被选中 */
+  user-select: none;
 }
 .mail-row {
   display: flex;

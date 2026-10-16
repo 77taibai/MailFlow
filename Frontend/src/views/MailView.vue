@@ -420,6 +420,8 @@ function closeMail() {
 }
 
 function openMail(mail) {
+  // 进入邮件阅读时退出多选/选择状态
+  if (selectedIds.value.length) selectedIds.value = [];
   if (Number(route.params.id) === mail.id) return;
   router.push({ name: 'mail', params: { id: String(mail.id) } });
 }

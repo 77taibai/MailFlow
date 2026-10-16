@@ -43,7 +43,7 @@
               class="att-tag"
               @click="download(att)"
             >
-              <el-icon class="is-loading" v-if="downloadingIds.includes(att.id)"><Loading /></el-icon>
+              <el-icon class="is-loading" v-if="downloadingIds.has(att.id)"><Loading /></el-icon>
               <el-icon v-else><Paperclip /></el-icon>
               {{ att.filename }} ({{ formatBytes(att.size) }})
             </el-tag>

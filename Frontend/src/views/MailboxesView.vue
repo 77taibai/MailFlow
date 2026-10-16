@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <div class="page-header">
+    <div class="page-header" v-if="!(isMobile && selectedMailbox)">
       <h2>邮箱管理</h2>
       <div class="header-actions">
         <el-tooltip

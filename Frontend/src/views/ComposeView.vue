@@ -40,6 +40,7 @@
       </el-form-item>
       <el-form-item label="附件">
         <el-upload
+          class="attach-upload"
           v-model:file-list="fileList"
           :auto-upload="false"
           multiple
@@ -221,6 +222,74 @@ onMounted(async () => {
   gap: 8px;
   padding-top: 4px;
 }
+
+/* ===== 附件列表 ===== */
+.attach-upload {
+  width: 100%;
+}
+.attach-upload :deep(.el-upload-list) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.attach-upload :deep(.el-upload-list__item) {
+  margin: 0;
+  padding: 6px 40px 6px 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-fill-color-blank);
+  transition: border-color 0.2s, background-color 0.2s;
+}
+.attach-upload :deep(.el-upload-list__item:hover),
+.attach-upload :deep(.el-upload-list__item:focus-within) {
+  border-color: var(--el-color-primary-light-5);
+  background: var(--el-color-primary-light-9);
+}
+.attach-upload :deep(.el-upload-list__item-name) {
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  line-height: 1.4;
+}
+.attach-upload :deep(.el-upload-list__item-info) {
+  width: 100%;
+  margin-left: 0;
+}
+.attach-upload :deep(.el-upload-list__item-name .el-icon) {
+  color: var(--el-color-primary);
+  margin-right: 8px;
+  font-size: 16px;
+}
+.attach-upload :deep(.el-upload-list__item-file-name) {
+  flex: 1;
+  min-width: 0;
+}
+/* 删除按钮常显，避免移动端依赖 hover 才能出现 */
+.attach-upload :deep(.el-upload-list__item .el-icon--close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  right: 6px;
+  border-radius: 50%;
+  color: var(--el-text-color-secondary);
+  opacity: 1;
+}
+.attach-upload :deep(.el-upload-list__item .el-icon--close:hover) {
+  color: var(--el-color-danger);
+  background: var(--el-color-danger-light-9);
+}
+/* 隐藏“删除”文字提示，常显按钮后无需它 */
+.attach-upload :deep(.el-upload-list__item .el-icon--close-tip) {
+  display: none !important;
+}
+/* 成功对勾占位会盖住删除按钮，直接隐藏 */
+.attach-upload :deep(.el-upload-list__item .el-upload-list__item-status-label) {
+  display: none;
+}
+
 @media (max-width: 767.98px) {
   .page {
     padding: 12px;
@@ -230,6 +299,12 @@ onMounted(async () => {
   }
   .form-actions .el-button {
     flex: 1;
+  }
+  /* 移动端给删除按钮更大的点击热区 */
+  .attach-upload :deep(.el-upload-list__item .el-icon--close) {
+    width: 32px;
+    height: 32px;
+    right: 4px;
   }
 }
 </style>
