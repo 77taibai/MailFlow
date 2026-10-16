@@ -256,7 +256,7 @@ node --input-type=module -e "import { signShareToken } from './src/crypto.js'; c
 ## 前端
 
 - 路由：`/login`、`/oidc-callback`、`/share/:token`（免鉴权）；`/` 重定向到 `/mail`，`/mail/:id?`（三栏邮件台，带 id 时打开该邮件；已加载列表与滚动位置留在组件内存，刷新回到合并账户 + 该邮件）、`/compose`（独立撰写页，`?mailbox=<id>` 预选发件邮箱、`?reply=<id>` 预填回复）、`/mailboxes`（邮箱管理）。守卫直接从 `localStorage.mailflow_token` 判断，401 统一清会话跳登录页；`/share` 页面用不带鉴权的独立 axios 实例，出错只提示不跳登录。
-- 邮件正文用 `sandbox="allow-popups"` 的 iframe + `srcdoc` 渲染，**不含** `allow-scripts` / `allow-same-origin`，脚本不执行、无法读取父页存储；未使用 `v-html`，也未引入第三方净化库。
+- 邮件正文用 `sandbox="allow-popups allow-popups-to-escape-sandbox"` 的 iframe + `srcdoc` 渲染，**不含** `allow-scripts` / `allow-same-origin`，脚本不执行、无法读取父页存储；正文里的链接（`<a>`/`<area>`）会被统一改写为 `target="_blank"` + `rel="noopener noreferrer"`（并注入 `<base target="_blank">` 兜底），点击后在新标签打开，不会在 iframe 内导航顶掉正文、也避免被仿冒站点伪装成应用自身；未使用 `v-html`，也未引入第三方净化库。
 - Token 存 `localStorage`（非 sessionStorage），跨标签页共享。
 
 ## 已知限制

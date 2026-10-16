@@ -58,7 +58,7 @@ commits: a4acfe6 (工作区未提交，待人工验证)
   - `GET /api/share/:token`：校验 token（必须 `typ === 'share'` 且 `mid` 为有效邮件 id），仅返回该邮件只读字段：`subject / fromName / fromAddr / toList / ccList / date / bodyText / bodyHtml / attachments[{id,filename,contentType,size}]`；**不返回** mailboxId/folderId/uid/messageId 等可用于横向定位的字段。
   - `GET /api/share/:token/attachments/:attachmentId`：校验 token 且附件属于 `mid`，流式下载该附件。
   - 分享接口不提供设置类写操作；`GET /api/share/:token` 打开时会把该邮件标记为已读（本地 DB + IMAP `\Seen`，IMAP 失败不影响读取）。
-- 前端：新增公开路由 `/share/:token` → `ShareView.vue`，只读渲染（复用 iframe 沙箱方式），无回复/删除/已读按钮、无侧栏、无设置入口；附件经分享下载接口下载。分享接口用独立 axios 实例（不注入 Bearer、不触发 401 跳登录），token 无效时展示「分享链接无效或已过期」。
+- 前端：新增公开路由 `/share/:token` → `ShareView.vue`，只读渲染（复用 iframe 沙箱方式：`sandbox="allow-popups allow-popups-to-escape-sandbox"`，正文链接统一 `target="_blank"` 在新标签打开），无回复/删除/已读按钮、无侧栏、无设置入口；附件经分享下载接口下载。分享接口用独立 axios 实例（不注入 Bearer、不触发 401 跳登录），token 无效时展示「分享链接无效或已过期」。
 - 登录后阅读窗（`MailReader`）新增「分享」动作：调用生成接口，把绝对链接展示/复制到剪贴板。
 
 ### 安全边界（硬约束）

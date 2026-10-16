@@ -54,8 +54,8 @@
         <iframe
           v-if="mail.bodyHtml"
           class="html-frame"
-          sandbox="allow-popups"
-          :srcdoc="mail.bodyHtml"
+          sandbox="allow-popups allow-popups-to-escape-sandbox"
+          :srcdoc="safeBodyHtml"
         ></iframe>
         <pre v-else class="text-body">{{ mail.bodyText }}</pre>
       </div>
@@ -65,17 +65,20 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { EditPen, Delete, View, Hide, Share } from '@element-plus/icons-vue';
 import api, { downloadToBlob, errMsg } from '../api.js';
-import { formatDateTime, formatBytes } from '../utils.js';
+import { formatDateTime, formatBytes, prepareMailHtml } from '../utils.js';
 
 const props = defineProps({
   mail: { type: Object, default: null },
 });
 
 const emit = defineEmits(['refresh', 'reply', 'deleted']);
+
+// 正文链接统一在新标签打开，避免在 iframe 内导航顶掉正文
+const safeBodyHtml = computed(() => prepareMailHtml(props.mail?.bodyHtml));
 
 // '' | 'seen' | 'delete' | 'share'
 const readerBusy = ref('');

@@ -84,7 +84,7 @@ commits: e41abc0..d8c3b01
 ### 查看/管理邮件
 
 - 列表 `GET /api/mails?mailboxId&folder&seen&page&pageSize`：分页（默认 20，按 date desc），返回摘要字段。虚拟合并账户用 `scope=merged-inbox`（无需 mailboxId）：`mails JOIN folders`，仅取 `special_use='\Inbox' OR path='INBOX'`，跨邮箱按 date desc 合并分页，附 `mailbox_name`；`GET /api/mailboxes` 额外返回 `mergedUnread` 供角标。
-- 详情 `GET /api/mails/:id`：body_html 在前端用 `sandbox`（无 allow-scripts/allow-same-origin）iframe 渲染，防脚本执行。
+- 详情 `GET /api/mails/:id`：body_html 在前端用 `sandbox="allow-popups allow-popups-to-escape-sandbox"`（无 allow-scripts/allow-same-origin）iframe + `srcdoc` 渲染，防脚本执行；正文链接统一改写为 `target="_blank"` + `rel="noopener noreferrer"` 并注入 `<base target="_blank">` 兜底，点击在新标签打开，不在 iframe 内导航。
 - 已读/未读：单个与批量 PATCH；同时 IMAP `messageFlagsAdd/Remove \Seen`（失败不影响本地状态，返回 warning）。
 - 移动：本地改 folder_id + IMAP `messageMove`；删除：有 `\Trash` specialUse folder 则移入，否则本地+服务端永久删除；`permanent=1` 直接永久删（本地记录与附件一并清）。
 - 附件：`GET /api/mails/:id/attachments/:attachmentId` 鉴权后从磁盘流式下载，Content-Disposition 编码文件名。
