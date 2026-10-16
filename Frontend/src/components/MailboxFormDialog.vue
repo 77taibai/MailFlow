@@ -296,16 +296,16 @@ defineExpose({ open });
 }
 .tip {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-left: 8px;
 }
 .hint {
   font-size: 13px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin: 0 0 10px;
 }
 .folder-list {
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--el-border-color-light);
   border-radius: 4px;
   max-height: 240px;
   overflow-y: auto;
@@ -318,7 +318,7 @@ defineExpose({ open });
   padding: 10px 12px;
 }
 .folder-item + .folder-item {
-  border-top: 1px solid #f2f6fc;
+  border-top: 1px solid var(--el-border-color-extra-light);
 }
 .folder-path {
   min-width: 0;
@@ -327,7 +327,7 @@ defineExpose({ open });
 .folder-empty {
   padding: 16px;
   text-align: center;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 13px;
 }
 @media (max-width: 767.98px) {

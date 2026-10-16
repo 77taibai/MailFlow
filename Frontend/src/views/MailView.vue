@@ -657,7 +657,7 @@ onMounted(() => {
   overflow: hidden;
 }
 .list-pane {
-  border-right: 1px solid #e4e7ed;
+  border-right: 1px solid var(--el-border-color-light);
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -671,7 +671,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--el-border-color-light);
 }
 .mobile-title {
   flex: 1;
@@ -695,7 +695,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 8px;
   padding: 8px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--el-border-color-light);
 }
 .toolbar-row {
   display: flex;

@@ -103,17 +103,17 @@ function download(att) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fff;
+  background: var(--el-bg-color);
 }
 .share-bar {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--el-border-color-light);
   font-weight: 600;
   font-size: 16px;
-  color: #2b4c6f;
+  color: var(--mf-brand-text);
   flex-shrink: 0;
 }
 .share-state {
@@ -121,7 +121,7 @@ function download(att) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   padding: 40px 16px;
 }
 .share-loading {
@@ -132,11 +132,11 @@ function download(att) {
   width: min(560px, 90%);
 }
 .share-spinner {
-  color: #409eff;
+  color: var(--el-color-primary);
 }
 .share-loading-text {
   font-size: 14px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 .share-skeleton {
   width: 100%;
@@ -149,7 +149,7 @@ function download(att) {
 }
 .share-header {
   padding: 14px 18px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--el-border-color-light);
   flex-shrink: 0;
 }
 .subject {
@@ -159,7 +159,7 @@ function download(att) {
 }
 .meta {
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin-top: 6px;
   display: flex;
   justify-content: space-between;
@@ -168,14 +168,14 @@ function download(att) {
 }
 .meta.to {
   display: block;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 .attachments {
   margin-top: 10px;
 }
 .att-title {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-bottom: 6px;
 }
 .att-list {
@@ -205,7 +205,7 @@ function download(att) {
   word-break: break-word;
   font-family: inherit;
   font-size: 14px;
-  color: #303133;
+  color: var(--el-text-color-primary);
   overflow: auto;
 }
 @media (max-width: 767.98px) {

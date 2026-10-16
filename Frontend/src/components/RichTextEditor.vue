@@ -152,7 +152,7 @@ defineExpose({ getText });
 .rich-editor :deep(.ql-toolbar) {
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
-  background: #fafafa;
+  background: var(--el-fill-color-lighter);
   /* 外层 el-form-item__content 的 line-height:32px 会继承进工具栏，
      抬高 .ql-picker-label 的行盒基线，使“Normal”等文字比右侧图标偏下；
      重置为 normal 以还原 Quill 默认的垂直居中 */
@@ -161,7 +161,7 @@ defineExpose({ getText });
 .rich-editor :deep(.ql-toolbar .ql-formats) {
   margin-right: 0;
   padding: 0 6px;
-  border-right: 1px solid #e4e7ed;
+  border-right: 1px solid var(--el-border-color-light);
 }
 .rich-editor :deep(.ql-toolbar .ql-formats:first-child) {
   padding-left: 2px;
@@ -187,7 +187,7 @@ defineExpose({ getText });
   display: flex;
   flex-direction: column;
   padding: 12px;
-  background: #fff;
+  background: var(--el-bg-color);
 }
 .rich-editor.is-fullscreen .editor-bar {
   flex: none;
@@ -220,5 +220,42 @@ defineExpose({ getText });
     border-right: 0;
     padding: 0 4px;
   }
+}
+
+/* Quill snow 主题自带硬编码颜色（#444 图标 / #ccc 边框 / #fff 面板），
+   深色下会不可见，这里随主题覆盖 */
+html.dark .rich-editor :deep(.ql-toolbar),
+html.dark .rich-editor :deep(.ql-container.ql-snow) {
+  border-color: var(--el-border-color);
+}
+html.dark .rich-editor :deep(.ql-snow .ql-stroke) {
+  stroke: var(--el-text-color-regular);
+}
+html.dark .rich-editor :deep(.ql-snow .ql-fill),
+html.dark .rich-editor :deep(.ql-snow .ql-stroke.ql-fill) {
+  fill: var(--el-text-color-regular);
+}
+html.dark .rich-editor :deep(.ql-snow .ql-picker) {
+  color: var(--el-text-color-regular);
+}
+html.dark .rich-editor :deep(.ql-snow .ql-picker-options) {
+  background-color: var(--el-bg-color-overlay);
+  border-color: var(--el-border-color);
+}
+html.dark .rich-editor :deep(.ql-editor.ql-blank::before) {
+  color: var(--el-text-color-placeholder);
+}
+html.dark .rich-editor :deep(.ql-snow .ql-editor code),
+html.dark .rich-editor :deep(.ql-snow .ql-editor .ql-code-block-container) {
+  background-color: var(--el-fill-color);
+}
+html.dark .rich-editor :deep(.ql-snow .ql-editor blockquote) {
+  border-left-color: var(--el-border-color);
+}
+html.dark .rich-editor :deep(.ql-snow .ql-tooltip) {
+  background-color: var(--el-bg-color-overlay);
+  border-color: var(--el-border-color);
+  color: var(--el-text-color-regular);
+  box-shadow: var(--el-box-shadow-light);
 }
 </style>

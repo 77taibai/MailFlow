@@ -189,7 +189,7 @@ defineExpose({ shareMail, toggleSeen, deleteMail });
 }
 .reader-header {
   padding: 14px 18px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--el-border-color-light);
   flex-shrink: 0;
 }
 .subject-line {
@@ -210,7 +210,7 @@ defineExpose({ shareMail, toggleSeen, deleteMail });
 }
 .meta {
   font-size: 13px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin-top: 6px;
   display: flex;
   justify-content: space-between;
@@ -218,14 +218,14 @@ defineExpose({ shareMail, toggleSeen, deleteMail });
 }
 .meta.to {
   display: block;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 .attachments {
   margin-top: 10px;
 }
 .att-title {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin-bottom: 6px;
 }
 .att-list {
@@ -255,7 +255,7 @@ defineExpose({ shareMail, toggleSeen, deleteMail });
   word-break: break-word;
   font-family: inherit;
   font-size: 14px;
-  color: #303133;
+  color: var(--el-text-color-primary);
   overflow: auto;
 }
 @media (max-width: 767.98px) {

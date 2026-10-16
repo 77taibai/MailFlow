@@ -90,7 +90,7 @@ function oidcLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1f2d3d 0%, #2b4c6f 100%);
+  background: var(--mf-login-bg);
 }
 .login-card {
   width: min(380px, calc(100vw - 32px));
@@ -99,11 +99,11 @@ function oidcLogin() {
 .title {
   text-align: center;
   margin: 10px 0 0;
-  color: #2b4c6f;
+  color: var(--mf-brand-text);
 }
 .subtitle {
   text-align: center;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   margin: 6px 0 20px;
   font-size: 13px;
 }

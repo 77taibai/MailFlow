@@ -32,14 +32,14 @@ import { globalLoading } from '../composables/useGlobalLoading.js';
 .glb-track {
   height: 3px;
   width: 100%;
-  background: rgba(64, 158, 255, 0.18);
+  background: color-mix(in srgb, var(--el-color-primary) 18%, transparent);
   overflow: hidden;
 }
 .glb-bar {
   height: 100%;
   width: 35%;
   border-radius: 2px;
-  background: linear-gradient(90deg, #409eff, #79bbff, #409eff);
+  background: linear-gradient(90deg, var(--el-color-primary), var(--el-color-primary-light-3), var(--el-color-primary));
   animation: glb-slide 1.1s ease-in-out infinite;
 }
 .glb-pill {
@@ -53,9 +53,9 @@ import { globalLoading } from '../composables/useGlobalLoading.js';
   gap: 6px;
   padding: 5px 12px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-  color: #303133;
+  background: var(--el-bg-color-overlay);
+  box-shadow: var(--el-box-shadow-light);
+  color: var(--el-text-color-primary);
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;

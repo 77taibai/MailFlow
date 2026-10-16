@@ -112,34 +112,34 @@ defineExpose({ getScrollInfo, restoreScroll, scrollToTop });
   align-items: flex-start;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
   cursor: pointer;
 }
 .mail-row:hover {
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
 }
 .mail-row.selected {
-  background: #ecf5ff;
+  background: var(--el-color-primary-light-9);
 }
 .mail-row.active {
-  background: #d9ecff;
-  box-shadow: inset 3px 0 0 #409eff;
+  background: var(--el-color-primary-light-8);
+  box-shadow: inset 3px 0 0 var(--el-color-primary);
 }
 .mail-row.active .from,
 .mail-row.active .subject {
-  color: #2b4c6f;
+  color: var(--mf-brand-text);
   font-weight: 600;
 }
 .mail-row.active .snippet {
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 .mail-row .from,
 .mail-row .subject {
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 .mail-row.unread .from,
 .mail-row.unread .subject {
-  color: #303133;
+  color: var(--el-text-color-primary);
   font-weight: 600;
 }
 .row-main {
@@ -159,7 +159,7 @@ defineExpose({ getScrollInfo, restoreScroll, scrollToTop });
 }
 .date {
   flex-shrink: 0;
-  color: #c0c4cc;
+  color: var(--el-text-color-disabled);
   font-size: 12px;
 }
 .row-line2 {
@@ -177,7 +177,7 @@ defineExpose({ getScrollInfo, restoreScroll, scrollToTop });
   white-space: nowrap;
 }
 .clip {
-  color: #e6a23c;
+  color: var(--el-color-warning);
   flex-shrink: 0;
 }
 .mb-tag {
@@ -185,7 +185,7 @@ defineExpose({ getScrollInfo, restoreScroll, scrollToTop });
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 .mb-tag :deep(.el-tag__content) {
   overflow: hidden;
@@ -194,7 +194,7 @@ defineExpose({ getScrollInfo, restoreScroll, scrollToTop });
 }
 .snippet {
   font-size: 12px;
-  color: #c0c4cc;
+  color: var(--el-text-color-disabled);
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -208,7 +208,7 @@ defineExpose({ getScrollInfo, restoreScroll, scrollToTop });
   gap: 6px;
   padding: 12px;
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 @media (max-width: 767.98px) {
   .mail-row {

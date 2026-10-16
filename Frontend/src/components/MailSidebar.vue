@@ -60,6 +60,25 @@
 
     <div class="sidebar-footer">
       <router-link to="/mailboxes"><el-button text>邮箱管理</el-button></router-link>
+      <el-dropdown trigger="click" popper-class="theme-dropdown" @command="setMode">
+        <el-button text>
+          <el-icon><component :is="themeIcon" /></el-icon>
+          <span class="theme-label">{{ themeLabel }}</span>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="system" :class="{ active: mode === 'system' }">
+              <el-icon><Monitor /></el-icon>跟随系统
+            </el-dropdown-item>
+            <el-dropdown-item command="light" :class="{ active: mode === 'light' }">
+              <el-icon><Sunny /></el-icon>浅色
+            </el-dropdown-item>
+            <el-dropdown-item command="dark" :class="{ active: mode === 'dark' }">
+              <el-icon><Moon /></el-icon>深色
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <el-button text type="danger" @click="$emit('logout')">退出</el-button>
     </div>
   </div>
@@ -67,6 +86,9 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { useTheme } from '../composables/useTheme.js';
+
+const { mode, setMode, themeIcon, themeLabel } = useTheme();
 
 const props = defineProps({
   mailboxes: { type: Array, default: () => [] },
@@ -127,10 +149,10 @@ function folderDisplayName(f) {
 
 <style scoped>
 .sidebar {
-  border-right: 1px solid #e4e7ed;
+  border-right: 1px solid var(--el-border-color-light);
   display: flex;
   flex-direction: column;
-  background: #f7f8fa;
+  background: var(--el-fill-color-light);
   overflow: hidden;
   height: 100%;
   /* 列表为点击导航，禁止文字被选中 */
@@ -142,12 +164,12 @@ function folderDisplayName(f) {
   gap: 8px;
   font-weight: 600;
   font-size: 17px;
-  color: #2b4c6f;
+  color: var(--mf-brand-text);
   padding: 14px 16px 10px;
 }
 .section-title {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   padding: 8px 16px 4px;
 }
 .submenu-header {
@@ -157,12 +179,12 @@ function folderDisplayName(f) {
   padding: 10px 16px;
   font-size: 14px;
   font-weight: 600;
-  color: #2b4c6f;
+  color: var(--mf-brand-text);
   cursor: pointer;
-  border-bottom: 1px solid #ebeef5;
+  border-bottom: 1px solid var(--el-border-color-lighter);
 }
 .submenu-header:hover {
-  background: #ecf5ff;
+  background: var(--el-color-primary-light-9);
 }
 .mailbox-item,
 .folder-item {
@@ -175,11 +197,11 @@ function folderDisplayName(f) {
 }
 .mailbox-item:hover,
 .folder-item:hover {
-  background: #ecf5ff;
+  background: var(--el-color-primary-light-9);
 }
 .mailbox-item.active,
 .folder-item.active {
-  background: #d9ecff;
+  background: var(--el-color-primary-light-8);
 }
 .mb-name {
   flex: 1;
@@ -194,10 +216,10 @@ function folderDisplayName(f) {
   white-space: nowrap;
 }
 .mb-icon {
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 .mb-go {
-  color: #c0c4cc;
+  color: var(--el-text-color-disabled);
   font-size: 12px;
 }
 .sidebar :deep(.el-scrollbar) {
@@ -210,14 +232,24 @@ function folderDisplayName(f) {
 }
 .empty-tip {
   font-size: 13px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   padding: 6px 16px;
 }
 .sidebar-footer {
-  border-top: 1px solid #e4e7ed;
+  border-top: 1px solid var(--el-border-color-light);
   padding: 6px 8px;
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
+  gap: 2px 4px;
+}
+.sidebar-footer .el-button {
+  padding: 4px 6px;
+}
+.sidebar-footer .theme-label {
+  margin-left: 4px;
+  font-size: 12px;
 }
 @media (max-width: 767.98px) {
   .mailbox-item,
@@ -226,5 +258,13 @@ function folderDisplayName(f) {
     padding-top: 10px;
     padding-bottom: 10px;
   }
+}
+</style>
+
+<style>
+/* 下拉菜单被 teleport 到 body，scoped 样式命中不到，需用全局块标注当前主题 */
+.theme-dropdown .el-dropdown-menu__item.active {
+  color: var(--el-color-primary);
+  font-weight: 600;
 }
 </style>
