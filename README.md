@@ -136,13 +136,33 @@ server {
 
 ### Ubuntu 一键构建/部署脚本
 
-仓库根目录提供 `deploy.sh`，需以 root 运行（假定后端目录就是仓库内的 `Backend/`，前端产物交给 Caddy）：
+仓库根目录提供 `deploy.sh`，需以 root 运行。部署形态是**后端留在仓库内 `Backend/` 直接运行**（由 systemd 服务 `mail-flow` 托管），前端构建产物交给 Caddy：
 
 ```bash
 sudo ./deploy.sh
 ```
 
-脚本按序执行：校验 root → 停止 `mail-flow` 服务 → 检查前后端 npm 依赖（缺 `node_modules` 时用 `npm ci`/`npm install` 安装）→ 构建前端 → 后端目录 `chown mail-flow:mail-flow` → 拷贝 `Frontend/dist` 到 `/var/www/mail-flow` 并 `chown caddy:caddy` → 启动 `mail-flow` 服务。默认值可在脚本顶部“可配置项”中调整（服务名、用户/组、站点根目录）。
+脚本按 8 步执行：
+
+1. 校验 root 身份
+2. 预检：目录、`Backend/.env` 是否存在且运行用户可读、systemd 单元是否存在、`WorkingDirectory` 是否指向 `Backend/`、用户组是否存在
+3. 检查 Node.js 版本，安装前后端缺失的 npm 依赖
+4. 构建前端到 `Frontend/dist`
+5. 准备后端运行期目录：只把 `DATA_DIR`（默认 `Backend/data`）交给运行用户，**不 chown 整个 `Backend/`**，避免夺走仓库属主导致后续 `git pull`、改代码失权；`.env` 设为 `root:<运行组> 640`
+6. 部署 `Frontend/dist` 到 `/var/www/mail-flow` 并 `chown caddy:caddy`
+7. `daemon-reload` 后重启 `mail-flow`
+8. 验证服务状态，失败则打印 `journalctl` 最近 40 行
+
+预检不通过会**在停服之前**直接退出，避免服务被停掉却因缺配置起不来。默认值可在脚本顶部“可配置项”中调整（服务名、用户/组、站点根目录）。
+
+服务单元判定用 `systemctl cat`，**不用** `systemctl list-unit-files | grep -q` —— 脚本启用了 `pipefail`，而 `grep -q` 命中即退出会让仍在写管道的 `systemctl` 收到 SIGPIPE（退出码 141），使整个管道被判为失败并误报“未找到服务单元”。
+
+npm 依赖安装会自动从 `package-lock.json` 的 `resolved` 字段推断 registry 源并传给 `npm ci`。npm 12 默认 `allow-remote=none`，若 npm 配置的 registry 与 lockfile 中 `resolved` 的 origin 不一致，会把这些正常的 registry 包误判为远程直连并报 `EALLOWREMOTE`。如需改用别的源，可覆盖：
+
+```bash
+sudo NPM_REGISTRY=https://registry.npmjs.org ./deploy.sh
+```
+
 
 ## 配置项
 
