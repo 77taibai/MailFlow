@@ -30,7 +30,7 @@
 
     <el-alert
       v-if="route.query.oauth === 'success'"
-      :title="`邮箱 ${route.query.email || ''} 授权成功`"
+      :title="`邮箱 ${route.query.email || ''} ${route.query.reauth === '1' ? '重新授权成功' : '授权成功'}`"
       type="success"
       show-icon
       style="margin-bottom: 12px"

@@ -12,7 +12,7 @@
       type="info"
       :closable="false"
       style="margin-bottom: 14px"
-      title="该邮箱通过 OAuth 授权接入，服务器与凭据由系统自动管理；如需更换账号，请删除后重新授权。"
+      title="该邮箱通过 OAuth 授权接入，服务器与凭据由系统自动管理；凭据失效时可点击下方「重新授权」刷新，无需删除邮箱。"
     />
 
     <el-form :label-position="isMobile ? 'top' : 'right'" :label-width="isMobile ? 'auto' : '110px'">
@@ -21,6 +21,12 @@
       </el-form-item>
       <el-form-item label="发件人名称">
         <el-input v-model="form.senderName" placeholder="发件时显示的名字，留空则只显示邮箱地址" />
+      </el-form-item>
+      <el-form-item v-if="isOauth" label="授权">
+        <el-button :loading="reauthing" @click="reauth">
+          <el-icon><Refresh /></el-icon>&nbsp;重新授权
+        </el-button>
+        <span class="tip">凭据失效或需更换账号时使用，无需删除邮箱</span>
       </el-form-item>
 
       <template v-if="!isOauth">
@@ -111,7 +117,8 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { Refresh } from '@element-plus/icons-vue';
 import api, { errMsg } from '../api.js';
 import { useIsMobile } from '../composables/useIsMobile.js';
 
@@ -122,6 +129,7 @@ const isMobile = useIsMobile();
 const editing = ref(null);
 const saving = ref(false);
 const testing = ref(false);
+const reauthing = ref(false);
 const folders = ref([]);
 const foldersLoading = ref(false);
 
@@ -275,6 +283,35 @@ async function test() {
   } finally {
     testing.value = false;
   }
+}
+
+async function reauth() {
+  if (!editing.value?.id) return;
+  try {
+    await ElMessageBox.confirm(
+      `将跳转到 ${providerLabel(editing.value.provider)} 重新授权「${form.name || editing.value.name}」，授权完成后返回本页。未保存的修改会丢失。`,
+      '重新授权',
+      { type: 'warning', confirmButtonText: '去授权', cancelButtonText: '取消' }
+    );
+  } catch {
+    return;
+  }
+  reauthing.value = true;
+  try {
+    const data = await api.get(`/mailboxes/${editing.value.id}/oauth/start`, {
+      loadingLabel: '正在发起 OAuth 授权…',
+    });
+    window.location.href = data.url;
+  } catch (e) {
+    ElMessage.error(errMsg(e));
+    reauthing.value = false;
+  }
+}
+
+function providerLabel(p) {
+  if (p === 'gmail') return 'Gmail';
+  if (p === 'outlook') return 'Outlook';
+  return 'OAuth';
 }
 
 defineExpose({ open });

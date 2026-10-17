@@ -306,16 +306,33 @@ mailboxesRouter.put('/:id/folders', (req, res) => {
   res.json({ ok: true });
 });
 
+function buildMailboxAuthUrl(provider, extraState = {}) {
+  const state = signToken({ t: 'mailbox-oauth', provider, ...extraState }, 600);
+  const redirectUri = `${config.appUrl}/api/mailboxes/oauth/${provider}/callback`;
+  return buildAuthRedirect(provider, redirectUri, state);
+}
+
 mailboxesRouter.get('/oauth/:provider/start', (req, res) => {
   const provider = req.params.provider;
   if (!PROVIDERS[provider]) return res.status(400).json({ error: '不支持的 OAuth 服务商' });
   if (!oauthProviderEnabled(provider)) {
     return res.status(400).json({ error: '该服务商 OAuth 未在 .env 中配置' });
   }
-  const state = signToken({ t: 'mailbox-oauth', provider }, 600);
-  const redirectUri = `${config.appUrl}/api/mailboxes/oauth/${provider}/callback`;
-  const url = buildAuthRedirect(provider, redirectUri, state);
-  res.json({ url: url.href });
+  res.json({ url: buildMailboxAuthUrl(provider).href });
+});
+
+// 已存在的 OAuth 邮箱重新授权：state 中带上邮箱 id，回调时直接覆盖该邮箱的凭据
+mailboxesRouter.get('/:id/oauth/start', (req, res) => {
+  const mb = getMailbox(req.params.id);
+  if (!mb) return res.status(404).json({ error: '邮箱不存在' });
+  const provider = mb.provider;
+  if (mb.auth_type !== 'oauth2' || !PROVIDERS[provider]) {
+    return res.status(400).json({ error: '该邮箱不是 OAuth 授权邮箱，无法重新授权' });
+  }
+  if (!oauthProviderEnabled(provider)) {
+    return res.status(400).json({ error: '该服务商 OAuth 未在 .env 中配置' });
+  }
+  res.json({ url: buildMailboxAuthUrl(provider, { mailboxId: mb.id }).href });
 });
 
 export const mailboxesOAuthPublicRouter = Router();
@@ -345,6 +362,38 @@ mailboxesOAuthPublicRouter.get('/:provider/callback', async (req, res) => {
     if (!email) throw new Error('无法从服务商获取邮箱地址');
 
     const defaults = PROVIDER_DEFAULTS[provider];
+    const reauthId = Number(statePayload.mailboxId) || 0;
+    if (reauthId) {
+      // 重新授权：必须更新到原邮箱，避免授权错账号时凭空新增一条记录
+      const target = getMailbox(reauthId);
+      if (!target) throw new Error('待重新授权的邮箱不存在，可能已被删除');
+      if (String(target.email).toLowerCase() !== String(email).toLowerCase()) {
+        throw new Error(
+          `授权账号 ${email} 与当前邮箱 ${target.email} 不一致，请使用正确的账号重新授权`
+        );
+      }
+      const keepRefresh = tokens.refreshToken
+        ? encryptText(tokens.refreshToken)
+        : target.refresh_token_enc;
+      db.prepare(
+        `UPDATE mailboxes SET auth_type = 'oauth2', provider = ?, access_token_enc = ?,
+          refresh_token_enc = ?, token_expires_at = ?, scope = ?,
+          status = 'ok', last_error = NULL, updated_at = ?
+         WHERE id = ?`
+      ).run(
+        provider,
+        encryptText(tokens.accessToken),
+        keepRefresh,
+        tokens.expiresAt,
+        tokens.scope,
+        now(),
+        target.id
+      );
+      return res.redirect(
+        `${frontend}/mailboxes?oauth=success&reauth=1&email=${encodeURIComponent(email)}`
+      );
+    }
+
     const existing = db
       .prepare(
         'SELECT id, imap_host, imap_port, smtp_host, smtp_port FROM mailboxes WHERE email = ?'
