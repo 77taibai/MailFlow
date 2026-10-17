@@ -515,8 +515,11 @@ async function batchSeen(seen) {
 async function batchSeenAll() {
   if (batchLoading.value) return;
   if (!mergedSelected.value && !selectedMailboxId.value) return;
+  const scopeText = mergedSelected.value
+    ? '所有邮箱的所有文件夹（含收件箱、垃圾邮件等）'
+    : '当前邮箱的所有文件夹（含收件箱、垃圾邮件等）';
   try {
-    await ElMessageBox.confirm('确定将当前列表中的全部未读邮件标记为已读吗？', '全部已读', {
+    await ElMessageBox.confirm(`确定将${scopeText}中的全部未读邮件标记为已读吗？`, '全部已读', {
       type: 'warning',
     });
   } catch {
@@ -524,9 +527,10 @@ async function batchSeenAll() {
   }
   batchLoading.value = 'seen-all';
   try {
+    // 覆盖全部文件夹，而不只是当前收件箱/当前文件夹
     const payload = mergedSelected.value
-      ? { scope: 'merged-inbox' }
-      : { mailboxId: selectedMailboxId.value, folderId: selectedFolderId.value };
+      ? { scope: 'all' }
+      : { mailboxId: selectedMailboxId.value };
     const data = await api.post('/mails/seen-all', payload, {
       loadingLabel: '正在标记全部已读（需同步到服务器）…',
       timeout: 300000,

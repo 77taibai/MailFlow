@@ -200,7 +200,7 @@ OAuth 邮箱的编辑界面只开放名称、发件人名称、同步间隔、�
 | GET | `/api/mails/:id/attachments/:attachmentId` | 附件流式下载 |
 | POST | `/api/mails/:id/share` | 生成该邮件的免登录分享链接，返回 `{ token, path, expiresAt }` |
 | PATCH | `/api/mails/:id` | 改已读状态 |
-| POST | `/api/mails/seen-all` | 一键全部已读。body 传 `mailboxId`（可选 `folderId`）限定范围，或用 `scope=merged-inbox` 覆盖合并账户收件箱；返回 `{ updated, warnings }` |
+| POST | `/api/mails/seen-all` | 一键全部已读。默认 body 传 `mailboxId`（可选 `folderId`）限定范围；传 `mailboxId` 不带 `folderId` 覆盖该邮箱所有文件夹，`scope=all` 覆盖所有邮箱所有文件夹（含垃圾邮件等），`scope=merged-inbox` 仅覆盖各邮箱收件箱；返回 `{ updated, warnings }` |
 | POST | `/api/mails/batch` | 批量 `seen` / `unseen` / `move` / `delete`（`permanent` 强制永久删） |
 | POST | `/api/mails/send` | multipart 发送（`to`/`cc`/`subject`/`text`/`html` + 附件，附件最多 10 个、单个 25MB；仅传 `html` 时后端自动生成纯文本备选）。可选 `replyTo`/`inReplyTo`/`references`（JSON 数组字符串或空白分隔）/`sender`；`Date` 与 `Message-ID` 未提供时自动生成 |
 

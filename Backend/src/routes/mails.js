@@ -264,12 +264,19 @@ mailsRouter.patch('/:id', async (req, res) => {
 
 mailsRouter.post('/seen-all', async (req, res) => {
   const { mailboxId, folderId, scope } = req.body || {};
+  // scope：'all' 覆盖所有邮箱的所有文件夹（含垃圾邮件等非收件箱）；
+  // 'merged-inbox' 仅覆盖各邮箱收件箱（旧行为）；缺省按 mailboxId（可选 folderId）限定范围。
+  const isAll = scope === 'all';
   const isMerged = scope === 'merged-inbox';
   const where = ['m.seen = 0'];
   const params = [];
+  let join = '';
 
-  if (isMerged) {
-    where.push("(f.special_use = '\\Inbox' OR f.path = 'INBOX')");
+  if (isAll || isMerged) {
+    join = 'JOIN folders f ON f.id = m.folder_id';
+    if (isMerged) {
+      where.push("(f.special_use = '\\Inbox' OR f.path = 'INBOX')");
+    }
   } else {
     if (!mailboxId) return res.status(400).json({ error: '缺少 mailboxId' });
     where.push('m.mailbox_id = ?');
@@ -280,7 +287,6 @@ mailsRouter.post('/seen-all', async (req, res) => {
     }
   }
 
-  const join = isMerged ? 'JOIN folders f ON f.id = m.folder_id' : '';
   const rows = db
     .prepare(`SELECT m.id, m.uid, m.folder_id FROM mails m ${join} WHERE ${where.join(' AND ')}`)
     .all(...params);
