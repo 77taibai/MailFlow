@@ -15,7 +15,7 @@
 - **免登录分享**：登录后可为某封邮件生成带签名密钥的分享链接（`/share/<token>`）。收件人无需登录即可查看该封邮件正文与该邮件附件，看不到其它邮件、也不能改动任何设置；分享令牌与登录令牌密钥隔离、类型互斥，不能互相冒用。密钥生成与令牌格式见下文「免登录分享」。
 - **钉钉推送**：全局 `.env` 配置（填 webhook 即启用），每邮箱独立开关，主题关键词白/黑名单，最大年龄窗口（默认 48h，防止首次回填轰炸），加签、队列限速防频控。
 - **敏感数据加密**：邮箱密码、OAuth token、钉钉 secret 全部 AES-256-GCM 加密落库。
-- **同源单端口部署**：生产模式后端直接托管前端构建产物并做 SPA 回退。
+- **纯 API 后端**：后端只提供 `/api` 接口，不再托管前端静态文件；前端构建产物由反向代理（如 Nginx）独立提供，`/api` 反代到后端，前后端同源。
 
 ## 技术栈
 
@@ -35,7 +35,7 @@
 MailFlow/
 ├── Backend/
 │   ├── src/
-│   │   ├── index.js          # 入口：Express 装配、静态托管、错误处理、调度器启动
+│   │   ├── index.js          # 入口：Express 装配、API 路由、错误处理、调度器启动（仅 API，不托管静态文件）
 │   │   ├── config.js         # 环境变量解析与必填校验
 │   │   ├── db.js             # SQLite 初始化、建表、通用查询
 │   │   ├── crypto.js         # AES-256-GCM 加解密、JWT 签发/校验、常量时间比较
@@ -96,28 +96,53 @@ cd Frontend; npm run dev
 
 浏览器打开 <http://localhost:5173>，用你在 `.env` 里设的 `AUTH_PASSWORD` 登录。
 
-开发模式由 `npm run dev` 脚本里的 `--dev` 标记识别：后端**不托管**前端构建产物（即使已经构建过），只提供 API，前端由 Vite dev server 提供，`/api` 经代理转发到 `:3000`。
+开发模式：后端 `npm run dev` 监听 `:3000` 只提供 API，前端由 Vite dev server 提供，`/api` 经代理转发到 `:3000`。
 
-### 4. 生产模式（单端口）
+### 4. 生产模式（前后端分离 + 反向代理）
 
-```powershell
-cd Frontend; npm run build          # 构建前端产物
-cd ..\Backend; npm start            # 监听 :3000，托管 ./static 并 SPA 回退
-```
-
-`npm start`（脚本未带 `--dev`）时，只要 `./static/index.html`（相对后端工作目录）存在，后端就会接管前端静态资源并做 SPA 回退（`assets/` 等资源目录下缺失的文件仍返回 404）；否则仅提供 API。产物目录可用 `FRONTEND_DIST` 指定（例如 `../Frontend/dist`）。`DATA_DIR` 下的 `mailflow.db` 与 `attachments/` 是唯一需要备份的数据。
-
-### 5. 一键构建（可选）
+后端只提供 API，前端构建产物由反向代理（如 Nginx）独立托管，二者同源：
 
 ```powershell
-# Windows PowerShell（根目录）
-.\build.ps1
-
-# Linux / macOS（首次先 chmod +x build.sh）
-./build.sh
+cd Frontend; npm run build          # 构建前端产物到 Frontend\dist
+cd ..\Backend; npm start            # 监听 :3000，仅提供 /api
 ```
 
-脚本按顺序执行：检查 `node` / `npm` 是否存在且 Node.js >= 22.5.0（缺失或过低只提示，需自行到 <https://nodejs.org> 安装）→ 前端运行库缺失时自动 `npm install` → 构建前端到 `MailFlowBuild/static` → 复制后端文件到 `MailFlowBuild`（不含 `node_modules`、`data`、`.env`）→ 询问是否创建 `.env` → 删除临时的 `Frontend/dist` → 打印产物路径。非交互环境用 `-CreateEnv` / `-NoEnv`（Linux 为 `--create-env` / `--no-env`）跳过 `.env` 交互询问；提示执行策略受限时用 `powershell -ExecutionPolicy Bypass -File .\build.ps1`。产物运行方式：`cd MailFlowBuild; npm install; npm start`。
+把 `Frontend/dist` 交给 Nginx 等静态服务器托管，并把 `/api` 反代到后端 `:3000`，同时为前端 SPA 路由配置回退到 `index.html`。示例 Nginx 配置：
+
+```nginx
+server {
+    listen 80;
+    server_name mail.example.com;
+
+    # 前端静态资源（Vue Router history 模式：找不到的路径回退 index.html）
+    root /var/www/mailflow;
+    index index.html;
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API 反代到后端
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+前后端同源，因此前端 axios 的 `baseURL` 保持 `/api`、无需 CORS。`DATA_DIR` 下的 `mailflow.db` 与 `attachments/` 是唯一需要备份的数据。
+
+### Ubuntu 一键构建/部署脚本
+
+仓库根目录提供 `deploy.sh`，需以 root 运行（假定后端目录就是仓库内的 `Backend/`，前端产物交给 Caddy）：
+
+```bash
+sudo ./deploy.sh
+```
+
+脚本按序执行：校验 root → 停止 `mail-flow` 服务 → 检查前后端 npm 依赖（缺 `node_modules` 时用 `npm ci`/`npm install` 安装）→ 构建前端 → 后端目录 `chown mail-flow:mail-flow` → 拷贝 `Frontend/dist` 到 `/var/www/mail-flow` 并 `chown caddy:caddy` → 启动 `mail-flow` 服务。默认值可在脚本顶部“可配置项”中调整（服务名、用户/组、站点根目录）。
 
 ## 配置项
 
@@ -125,8 +150,7 @@ cd ..\Backend; npm start            # 监听 :3000，托管 ./static 并 SPA 回
 |---|---|---|
 | `PORT` | `3000` | 监听端口 |
 | `APP_URL` | `http://localhost:{PORT}` | 外部可访问基址，决定 OAuth/OIDC 的 `redirect_uri` |
-| `FRONTEND_ORIGIN` | 空（用 `APP_URL`） | 授权回调后跳回的前端地址（dev 为 `http://localhost:5173`） |
-| `FRONTEND_DIST` | `./static`（相对后端工作目录） | 前端构建产物目录 |
+| `FRONTEND_ORIGIN` | 空（用 `APP_URL`） | 授权回调后跳回的前端地址（dev 为 `http://localhost:5173`，生产为前端对外地址） |
 | `APP_SECRET` | **必填** | JWT 签名 + 凭据加密密钥（scrypt 派生） |
 | `DATA_DIR` | `./data` | SQLite 与附件目录（相对进程工作目录） |
 | `AUTH_PASSWORD` | **必填**（`DISABLE_PASSWORD_LOGIN=1` 时可空） | 单用户登录密码（明文存 env，不落库） |
@@ -262,7 +286,7 @@ node --input-type=module -e "import { signShareToken } from './src/crypto.js'; c
 
 ## 已知限制
 
-- **无 CORS**：后端未注册任何 CORS 中间件，前后端必须同源部署（生产托管或反向代理），`FRONTEND_ORIGIN` 只用于授权跳转，不提供跨域头。
+- **无 CORS**：后端未注册任何 CORS 中间件，仅提供 API，前端必须经反向代理与后端同源部署（生产由 Nginx 等托管前端产物并反代 `/api`），`FRONTEND_ORIGIN` 只用于授权跳转，不提供跨域头。
 - **单用户**：无用户表、无多租户、无 RBAC；登录限速计数器与 OAuth 刷新锁都在内存，进程重启清零、多实例不共享。
 - **无迁移系统、无测试、无 lint、无 TypeScript**：前后端均纯 JS，API 契约无类型保障。
 - **同步全局串行**、tick 粒度固定 30 秒；同步失败无重试，只记 `last_error` 等下一轮。
