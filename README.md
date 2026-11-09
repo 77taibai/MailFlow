@@ -27,7 +27,7 @@
 | 前端 | Vue 3.5（`<script setup>`，纯 JS）、Vite 8、Element Plus（zh-cn）、Pinia 4、vue-router 5、axios、Quill 2（富文本编辑） |
 | 加密 | `node:crypto`：AES-256-GCM + scrypt 派生密钥 |
 
-依赖极少（后端 8 个包），无原生编译模块、无全局安装、无需 Docker。
+依赖极少（后端 8 个包），无原生编译模块、无全局安装，不依赖 Docker 也能直接跑；同时也提供官方镜像（见下文「Docker」）。
 
 ## 目录结构
 
@@ -182,6 +182,57 @@ npm 依赖安装会自动从 `package-lock.json` 的 `resolved` 字段推断 reg
 
 ```bash
 sudo NPM_REGISTRY=https://registry.npmjs.org ./deploy.sh
+```
+
+### Docker
+
+仓库根目录的 `Dockerfile` 把前端产物、后端源码、后端运行期依赖打进**一个镜像**（单进程即可跑完整站点）：
+
+| 路径 | 内容 |
+|---|---|
+| `/app/src` | 后端源码 |
+| `/app/node_modules` | 后端 `dependencies`（`npm ci --omit=dev`，不含 vite/rollup/esbuild 等构建期包） |
+| `/app/dist` | 前端构建产物（镜像内设 `STATIC_DIR=/app/dist`，由后端托管） |
+| `/app/data` | SQLite 与附件，已声明 `VOLUME` |
+
+构建分三阶段：`frontend` 阶段装全量依赖并 `npm run build`；`backend-deps` 阶段只装运行期依赖；`runtime` 阶段仅拷贝这三样东西，构建工具链全部丢弃。`.dockerignore` 排除了 `node_modules`、`dist`、`data`、`.env`，本地旧产物与密钥不会混进镜像。
+
+```bash
+docker build -t mailflow:1.4.5 .
+
+docker run -d --name mailflow \
+  -p 3000:3000 \
+  -e APP_SECRET='<随机长字符串>' \
+  -e AUTH_PASSWORD='<登录密码>' \
+  -e APP_URL='https://mail.example.com' \
+  -v mailflow-data:/app/data \
+  mailflow:1.4.5
+```
+
+`package-lock.json` 里的 `resolved` 指向 npmmirror，构建时统一替换为官方源；如需换源可传 `--build-arg NPM_REGISTRY=https://registry.npmmirror.com`。
+
+访问 <http://localhost:3000> 即为完整站点。其余配置项（OAuth、钉钉、OIDC 等）同样以 `-e` 传入，变量名与「配置项」表一致；`.env` 里写了什么，容器就需要什么环境变量。
+
+### GitHub Actions 镜像发布
+
+`.github/workflows/docker.yml` 负责构建并推送 GHCR 镜像（`ghcr.io/<owner>/<repo>`）：
+
+- **触发**：只在 push `v*` tag 时运行（也可手动 `workflow_dispatch`）。普通提交（含 `main`）不触发，不会每次提交都产出镜像。
+- **版本校验**：tag 去掉 `v` 后必须与 `Backend/package.json` 的 `version` 一致，否则直接失败，避免 `v1.4.5` 打出 `1.4.4` 的镜像。
+- **产物**：`linux/amd64` + `linux/arm64` 多架构镜像，tag 为 `<package.json 版本>`（如 `1.4.5`）、`sha-<短提交>`、`latest`。
+- **认证**：用内置 `GITHUB_TOKEN` 登录 GHCR，无需配置任何 secret。首次推送后需在仓库 Packages 设置里把包可见性改为 public（若想让别人免登录拉取）。
+
+发版流程：
+
+```bash
+npm version 1.4.5 --no-git-tag-version   # 前后端各执行一次，或手动改两个 package.json
+git commit -am "chore: 版本号 1.4.5"
+git tag v1.4.5
+git push origin main --tags               # 只有推 tag 这一步会触发镜像构建
+```
+
+```bash
+docker pull ghcr.io/77taibai/mailflow:1.4.5
 ```
 
 
