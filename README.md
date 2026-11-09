@@ -15,7 +15,7 @@
 - **免登录分享**：登录后可为某封邮件生成带签名密钥的分享链接（`/share/<token>`）。收件人无需登录即可查看该封邮件正文与该邮件附件，看不到其它邮件、也不能改动任何设置；分享令牌与登录令牌密钥隔离、类型互斥，不能互相冒用。密钥生成与令牌格式见下文「免登录分享」。
 - **钉钉推送**：全局 `.env` 配置（填 webhook 即启用），每邮箱独立开关，主题关键词白/黑名单，最大年龄窗口（默认 48h，防止首次回填轰炸），加签、队列限速防频控。
 - **敏感数据加密**：邮箱密码、OAuth token、钉钉 secret 全部 AES-256-GCM 加密落库。
-- **纯 API 后端**：后端只提供 `/api` 接口，不再托管前端静态文件；前端构建产物由反向代理（如 Nginx）独立提供，`/api` 反代到后端，前后端同源。
+- **后端可托管前端**：`.env` 中 `STATIC_DIR` 留空时后端只提供 `/api` 接口（前端产物交给反向代理如 Nginx）；填写后由后端直接托管该目录下的 SPA 产物，并对非 `/api` 路径回退到 `index.html`，单进程即可跑完整站点。
 
 ## 技术栈
 
@@ -35,7 +35,7 @@
 MailFlow/
 ├── Backend/
 │   ├── src/
-│   │   ├── index.js          # 入口：Express 装配、API 路由、错误处理、调度器启动（仅 API，不托管静态文件）
+│   │   ├── index.js          # 入口：Express 装配、API 路由、错误处理、调度器启动（按 STATIC_DIR 可选托管前端）
 │   │   ├── config.js         # 环境变量解析与必填校验
 │   │   ├── db.js             # SQLite 初始化、建表、通用查询
 │   │   ├── crypto.js         # AES-256-GCM 加解密、JWT 签发/校验、常量时间比较
@@ -98,9 +98,30 @@ cd Frontend; npm run dev
 
 开发模式：后端 `npm run dev` 监听 `:3000` 只提供 API，前端由 Vite dev server 提供，`/api` 经代理转发到 `:3000`。
 
-### 4. 生产模式（前后端分离 + 反向代理）
+### 4. 生产模式
 
-后端只提供 API，前端构建产物由反向代理（如 Nginx）独立托管，二者同源：
+生产环境有两种形态，取决于 `.env` 里的 `STATIC_DIR`：
+
+**A. 后端托管前端（单进程，推荐自用）**
+
+在 `Backend/.env` 里把 `STATIC_DIR` 指向前端产物目录，后端会同时提供 API 与前端页面：
+
+```dotenv
+STATIC_DIR=../Frontend/dist
+```
+
+```powershell
+cd Frontend; npm run build          # 构建前端产物到 Frontend\dist
+cd ..\Backend; npm start            # :3000 同时提供 /api 与前端页面
+```
+
+访问 <http://localhost:3000> 即为完整站点，`/api` 与页面同源，无需反向代理。SPA 路由（`/mail/123`、`/share/xxx` 等）由后端回退到 `index.html`；`assets/` 下带 hash 的文件长缓存，`index.html` 不缓存。若目录中没有 `index.html`，启动时会直接报错提示先构建前端。
+
+`STATIC_DIR` 支持绝对路径（如 `STATIC_DIR=/var/www/mail-flow`）与相对路径（相对进程工作目录，即 `Backend/`）。
+
+**B. 前后端分离 + 反向代理**
+
+`STATIC_DIR` 留空（默认），后端只提供 `/api`，前端构建产物由反向代理（如 Nginx）独立托管，二者同源：
 
 ```powershell
 cd Frontend; npm run build          # 构建前端产物到 Frontend\dist
@@ -173,6 +194,7 @@ sudo NPM_REGISTRY=https://registry.npmjs.org ./deploy.sh
 | `FRONTEND_ORIGIN` | 空（用 `APP_URL`） | 授权回调后跳回的前端地址（dev 为 `http://localhost:5173`，生产为前端对外地址） |
 | `APP_SECRET` | **必填** | JWT 签名 + 凭据加密密钥（scrypt 派生） |
 | `DATA_DIR` | `./data` | SQLite 与附件目录（相对进程工作目录） |
+| `STATIC_DIR` | 空 | 前端静态文件目录。留空则后端只提供 `/api`；填写后由后端托管该目录的 SPA 产物（需含 `index.html`），非 `/api` 路径回退到 `index.html` |
 | `AUTH_PASSWORD` | **必填**（`DISABLE_PASSWORD_LOGIN=1` 时可空） | 单用户登录密码（明文存 env，不落库） |
 | `DISABLE_PASSWORD_LOGIN` | `0` | 设 `1` 禁用密码登录，只允许 OIDC 登录（此时必须配置 OIDC 三项） |
 | `JWT_TTL_HOURS` | `168` | 登录态有效期（小时） |
@@ -306,7 +328,7 @@ node --input-type=module -e "import { signShareToken } from './src/crypto.js'; c
 
 ## 已知限制
 
-- **无 CORS**：后端未注册任何 CORS 中间件，仅提供 API，前端必须经反向代理与后端同源部署（生产由 Nginx 等托管前端产物并反代 `/api`），`FRONTEND_ORIGIN` 只用于授权跳转，不提供跨域头。
+- **无 CORS**：后端未注册任何 CORS 中间件，前端必须与后端同源访问：要么设置 `STATIC_DIR` 由后端直接托管前端（天然同源），要么由反向代理托管前端产物并反代 `/api`。`FRONTEND_ORIGIN` 只用于授权跳转，不提供跨域头。
 - **单用户**：无用户表、无多租户、无 RBAC；登录限速计数器与 OAuth 刷新锁都在内存，进程重启清零、多实例不共享。
 - **无迁移系统、无测试、无 lint、无 TypeScript**：前后端均纯 JS，API 契约无类型保障。
 - **同步全局串行**、tick 粒度固定 30 秒；同步失败无重试，只记 `last_error` 等下一轮。

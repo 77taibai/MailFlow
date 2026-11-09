@@ -37,6 +37,8 @@ export const config = {
   frontendOrigin: (env.FRONTEND_ORIGIN || '').replace(/\/+$/, ''),
   appSecret,
   dataDir: path.resolve(env.DATA_DIR || './data'),
+  // 前端静态文件目录：留空则后端只提供 API；非空时由后端托管该目录下的 SPA 产物
+  staticDir: env.STATIC_DIR ? path.resolve(env.STATIC_DIR) : '',
   authPassword,
   passwordLoginDisabled,
   jwtTtlHours: num('JWT_TTL_HOURS', 168),
